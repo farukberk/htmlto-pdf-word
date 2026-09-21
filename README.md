@@ -1345,6 +1345,10 @@ Runtime Scope         : Off
 Runtime Orientation   : On
 ```
 
+## Automatic Current View export on preview load
+
+For a one-click PDF preview page, let the normal Mendix button open a page containing the widget and report content. Configure **Export Scope = Current View**, **Auto Export On Load = Yes**, **Auto Export Delay (ms) = 500**, **Show Export Button = No**, and map **Current View Export Action** to the HTML-to-PDF microflow. The widget captures after a browser paint and the configured delay, invokes the action once per mount, and does not download an extra `.html` file. Increase the delay for asynchronously rendered content; normal manual exports remain immediate. The widget does not automatically close the preview page.
+
 ---
 
 # Build

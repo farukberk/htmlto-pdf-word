@@ -23,5 +23,16 @@ export function check(values: HtmlPdfExportViewPreviewProps): Problem[] {
     if (values.showExportButton && !values.buttonCaption.trim()) {
         problems.push({ property: "buttonCaption", severity: "warning", message: "Provide an accessible Export Button Caption." });
     }
+    if (values.autoExportDelayMs == null || values.autoExportDelayMs < 0 || values.autoExportDelayMs > 10_000) {
+        problems.push({ property: "autoExportDelayMs", severity: "error", message: "Auto Export Delay must be between 0 and 10000 ms." });
+    }
+    if (values.autoExportOnLoad && values.exportScope !== "currentView") {
+        problems.push({ property: "exportScope", severity: "error", message: "Auto Export On Load supports Current View only." });
+    }
+    if (values.autoExportOnLoad && values.exportScope === "currentView" &&
+        !(values.exportFormat === "word" ? values.onWordExport : values.onExport)) {
+        problems.push({ property: values.exportFormat === "word" ? "onWordExport" : "onExport", severity: "error",
+            message: "Configure the Current View export action before enabling Auto Export On Load." });
+    }
     return problems;
 }

@@ -15,7 +15,10 @@ export function HtmlPdfExportView(props: HtmlPdfExportViewContainerProps): React
     const [runtimeOrientation, setRuntimeOrientation] = useState(props.pdfOrientation);
     const [runtimeFormat, setRuntimeFormat] = useState(props.exportFormat);
     const [busy, setBusy] = useState(false);
+    const [autoDelayElapsed, setAutoDelayElapsed] = useState(false);
     const clickGuard = useRef(false);
+    const autoExportTriggeredRef = useRef(false);
+    const exportContentRef = useRef<(trigger?: "manual" | "auto") => void>(() => undefined);
     const activeAction = useRef<"currentView" | "fullData" | "currentViewWord" | "fullDataWord">();
     const observedExecuting = useRef(false);
     const appearance = props.showRuntimeAppearanceSelector ? runtimeAppearance : props.appearanceMode;
@@ -47,9 +50,10 @@ export function HtmlPdfExportView(props: HtmlPdfExportViewContainerProps): React
         setBusy(false);
     }
 
-    const exportContent = useCallback(() => {
+    const exportContent = useCallback((trigger: "manual" | "auto" = "manual") => {
         if (clickGuard.current) return;
         clickGuard.current = true;
+        if (trigger === "manual" && props.autoExportOnLoad) autoExportTriggeredRef.current = true;
         setBusy(true);
         setExportError(undefined);
         if (scope !== "currentView") {
@@ -89,59 +93,97 @@ export function HtmlPdfExportView(props: HtmlPdfExportViewContainerProps): React
             }
             return;
         }
-        if (!rootRef.current) { finishExport(); return; }
-        const geometry = measureSourceGeometry(rootRef.current);
-        const clone = cloneExportRoot(rootRef.current, { includeImages: props.includeImages, appearanceMode: format === "word" ? "cleanReport" : appearance });
-        if (format === "word") normalizeWordSemantics(clone);
-        const html = buildHtmlDocument(clone, { includeStyles: props.includeStyles }, {
-            sourceWidth: geometry.width,
-            sourceHeight: geometry.height,
-            orientation
-        });
-        const blob = new Blob([html], { type: "text/html;charset=utf-8" });
-        if (format === "pdf") {
-            const url = URL.createObjectURL(blob);
-            const link = document.createElement("a");
-            link.href = url;
-            link.download = props.fileName || "export.html";
-            link.click();
-            URL.revokeObjectURL(url);
-        }
-        if (props.debugMode) {
-            const portraitWidth = (210 - 16) * 96 / 25.4;
-            const landscapeWidth = (297 - 16) * 96 / 25.4;
-            const portraitScale = Math.min(1, portraitWidth / geometry.width);
-            const landscapeScale = Math.min(1, landscapeWidth / geometry.width);
-            const selectedOrientation = orientation === "auto" && landscapeScale >= portraitScale * 1.15 ? "landscape" : orientation === "auto" ? "portrait" : orientation;
-            console.info("HtmlPdfExportView captured", {
-                bytes: blob.size,
-                appearanceMode: appearance,
-                exportScope: scope,
+        try {
+            if (!rootRef.current) throw new Error("The export content is not available.");
+            const action = format === "word" ? props.onWordExport : props.onExport;
+            if (trigger === "auto" && !action) throw new Error("Configure the Current View export action before enabling Auto Export On Load.");
+            if (action && (!action.canExecute || action.isExecuting)) throw new Error("The Current View export action is not ready.");
+            if (format === "word" && !action) throw new Error("The Current View Word export action is not configured.");
+
+            const geometry = measureSourceGeometry(rootRef.current);
+            const clone = cloneExportRoot(rootRef.current, { includeImages: props.includeImages, appearanceMode: format === "word" ? "cleanReport" : appearance });
+            if (format === "word") normalizeWordSemantics(clone);
+            const html = buildHtmlDocument(clone, { includeStyles: props.includeStyles }, {
                 sourceWidth: geometry.width,
                 sourceHeight: geometry.height,
-                selectedOrientation,
-                portraitScale,
-                landscapeScale,
-                chosenScale: selectedOrientation === "landscape" ? landscapeScale : portraitScale,
-                chromiumViewportWidth: geometry.width,
-                printablePageWidth: selectedOrientation === "landscape" ? landscapeWidth : portraitWidth
+                orientation
             });
+            if (props.debugMode) {
+                const portraitWidth = (210 - 16) * 96 / 25.4;
+                const landscapeWidth = (297 - 16) * 96 / 25.4;
+                const portraitScale = Math.min(1, portraitWidth / geometry.width);
+                const landscapeScale = Math.min(1, landscapeWidth / geometry.width);
+                const selectedOrientation = orientation === "auto" && landscapeScale >= portraitScale * 1.15 ? "landscape" : orientation === "auto" ? "portrait" : orientation;
+                console.info("HtmlPdfExportView captured", {
+                    bytes: new Blob([html]).size,
+                    appearanceMode: appearance,
+                    exportScope: scope,
+                    sourceWidth: geometry.width,
+                    sourceHeight: geometry.height,
+                    selectedOrientation,
+                    portraitScale,
+                    landscapeScale,
+                    chosenScale: selectedOrientation === "landscape" ? landscapeScale : portraitScale,
+                    chromiumViewportWidth: geometry.width,
+                    printablePageWidth: selectedOrientation === "landscape" ? landscapeWidth : portraitWidth
+                });
+            }
+            if (format === "word" && props.onWordExport) {
+                props.onWordExport.execute({ HtmlContent: html, Orientation: orientation });
+                activeAction.current = "currentViewWord";
+            } else if (format === "pdf" && props.onExport) {
+                props.onExport.execute({ HtmlContent: html });
+                activeAction.current = "currentView";
+            } else {
+                const url = URL.createObjectURL(new Blob([html], { type: "text/html;charset=utf-8" }));
+                const link = document.createElement("a");
+                link.href = url;
+                link.download = props.fileName || "export.html";
+                link.click();
+                URL.revokeObjectURL(url);
+                finishExport();
+            }
+        } catch (error) {
+            const technicalMessage = error instanceof Error ? error.message : "Current View export failed.";
+            setExportError(/Current View export action|export content/i.test(technicalMessage) ? technicalMessage : userMessage(technicalMessage));
+            if (props.debugMode) console.error("HtmlPdfExportView Current View export failed", { format, message: technicalMessage });
+            finishExport();
         }
-        if (format === "word" && props.onWordExport?.canExecute && !props.onWordExport.isExecuting) {
-            props.onWordExport.execute({ HtmlContent: html, Orientation: orientation });
-            activeAction.current = "currentViewWord";
-        } else if (format === "pdf" && props.onExport?.canExecute && !props.onExport.isExecuting) {
-            props.onExport.execute({ HtmlContent: html });
-            activeAction.current = "currentView";
-        } else finishExport();
     }, [props, appearance, scope, orientation, format, fullDataConfigured]);
+
+    exportContentRef.current = exportContent;
+    useEffect(() => {
+        if (!props.autoExportOnLoad || autoExportTriggeredRef.current) return;
+        const delay = Number.isFinite(props.autoExportDelayMs) ? Math.max(0, Math.min(10_000, props.autoExportDelayMs)) : 500;
+        let timeout: number | undefined;
+        const frame = window.requestAnimationFrame(() => { timeout = window.setTimeout(() => setAutoDelayElapsed(true), delay); });
+        return () => { window.cancelAnimationFrame(frame); if (timeout !== undefined) window.clearTimeout(timeout); };
+    }, [props.autoExportOnLoad, props.autoExportDelayMs]);
+
+    const currentViewAction = format === "word" ? props.onWordExport : props.onExport;
+    useEffect(() => {
+        if (!props.autoExportOnLoad || !autoDelayElapsed || autoExportTriggeredRef.current) return;
+        if (scope !== "currentView") {
+            autoExportTriggeredRef.current = true;
+            setExportError("Auto Export On Load supports Current View only.");
+            return;
+        }
+        if (!currentViewAction) {
+            autoExportTriggeredRef.current = true;
+            setExportError("Configure the Current View export action before enabling Auto Export On Load.");
+            return;
+        }
+        if (!currentViewAction.canExecute || currentViewAction.isExecuting) return;
+        autoExportTriggeredRef.current = true;
+        if (!clickGuard.current) exportContentRef.current("auto");
+    }, [props.autoExportOnLoad, autoDelayElapsed, scope, currentViewAction?.canExecute, currentViewAction?.isExecuting]);
 
     const defaultCaption = props.showRuntimeFormatSelector ? "Export" : format === "word" ? "Export Word" : "Export PDF";
     const buttonCaption = props.buttonCaption && props.buttonCaption !== "Export PDF" ? props.buttonCaption : defaultCaption;
 
     return <>
         <div ref={rootRef} className={props.class} style={props.style} data-html-pdf-export-view="true">{props.content}</div>
-        {(props.showExportButton || props.showRuntimeAppearanceSelector || props.showRuntimeScopeSelector || props.showRuntimeOrientationSelector || props.showRuntimeFormatSelector) &&
+        {(props.showExportButton || props.showRuntimeAppearanceSelector || props.showRuntimeScopeSelector || props.showRuntimeOrientationSelector || props.showRuntimeFormatSelector || exportError) &&
             <div className="html-pdf-export-runtime-controls" data-html-pdf-export-exclude="true" aria-busy={busy}>
                 {props.showRuntimeFormatSelector && <label>Format
                     <select aria-label="Export format" value={runtimeFormat} disabled={busy}
@@ -171,7 +213,7 @@ export function HtmlPdfExportView(props: HtmlPdfExportViewContainerProps): React
                     </select>
                 </label>}
                 {props.showExportButton && <button type="button" className="btn mx-button btn-primary" aria-label={buttonCaption}
-                    disabled={busy} onClick={exportContent}>{busy ? format === "word" ? "Generating Word document..." : scope === "currentView" ? "Generating PDF..." : "Preparing large PDF..." : buttonCaption}</button>}
+                    disabled={busy} onClick={() => exportContent()}>{busy ? format === "word" ? "Generating Word document..." : scope === "currentView" ? "Generating PDF..." : "Preparing large PDF..." : buttonCaption}</button>}
                 {exportError && <div role="alert">{exportError}</div>}
             </div>}
     </>;

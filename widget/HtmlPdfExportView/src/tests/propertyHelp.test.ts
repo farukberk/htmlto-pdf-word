@@ -28,7 +28,8 @@ describe("Studio Pro property help", () => {
             "Show Runtime Appearance Selector", "Show Runtime Scope Selector", "Show Runtime Orientation Selector",
             "FullData Export Action", "Report JSON", "Template Content",
             "Batch Mode", "Batch Size", "Batch Collection Path", "Debug Mode"
-            , "Export Format", "Show Runtime Format Selector", "Current View Word Export Action", "FullData Word Export Action"
+            , "Export Format", "Show Runtime Format Selector", "Current View Word Export Action", "FullData Word Export Action",
+            "Show Export Button", "Auto Export On Load", "Auto Export Delay (ms)"
         ]));
     });
 
@@ -44,6 +45,9 @@ describe("Studio Pro property help", () => {
         expect(defaultOf("showRuntimeOrientationSelector")).toBe("true");
         expect(defaultOf("showRuntimeFormatSelector")).toBe("false");
         expect(defaultOf("buttonCaption")).toBe("Export PDF");
+        expect(defaultOf("showExportButton")).toBe("true");
+        expect(defaultOf("autoExportOnLoad")).toBe("false");
+        expect(defaultOf("autoExportDelayMs")).toBe("500");
         expect(defaultOf("batchMode")).toBe("auto");
         expect(defaultOf("batchSize")).toBe("5000");
     });

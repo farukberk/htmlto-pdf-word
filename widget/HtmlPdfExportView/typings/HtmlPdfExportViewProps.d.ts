@@ -28,6 +28,8 @@ export interface HtmlPdfExportViewContainerProps {
     exportScope: ExportScopeEnum;
     pdfOrientation: PdfOrientationEnum;
     showExportButton: boolean;
+    autoExportOnLoad: boolean;
+    autoExportDelayMs: number;
     buttonCaption: string;
     showRuntimeAppearanceSelector: boolean;
     showRuntimeScopeSelector: boolean;
@@ -77,6 +79,8 @@ export interface HtmlPdfExportViewPreviewProps {
     exportScope: ExportScopeEnum;
     pdfOrientation: PdfOrientationEnum;
     showExportButton: boolean;
+    autoExportOnLoad: boolean;
+    autoExportDelayMs: number | null;
     buttonCaption: string;
     showRuntimeAppearanceSelector: boolean;
     showRuntimeScopeSelector: boolean;

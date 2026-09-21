@@ -1,5 +1,5 @@
-import { createElement } from "react";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { createElement, StrictMode } from "react";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { HtmlPdfExportView } from "../HtmlPdfExportView";
 import { HtmlPdfExportViewContainerProps } from "../../typings/HtmlPdfExportViewProps";
@@ -15,6 +15,8 @@ function baseProps(overrides: Record<string, unknown> = {}): HtmlPdfExportViewCo
         exportScope: "currentView",
         fileName: "export.html",
         showExportButton: true,
+        autoExportOnLoad: false,
+        autoExportDelayMs: 500,
         buttonCaption: "Export",
         showRuntimeAppearanceSelector: false,
         showRuntimeScopeSelector: false,
@@ -31,7 +33,7 @@ function baseProps(overrides: Record<string, unknown> = {}): HtmlPdfExportViewCo
 }
 
 describe("HtmlPdfExportView scope integration", () => {
-    afterEach(() => { cleanup(); vi.restoreAllMocks(); });
+    afterEach(() => { cleanup(); vi.useRealTimers(); vi.restoreAllMocks(); });
     beforeEach(() => {
         Object.defineProperty(URL, "createObjectURL", { configurable: true, value: vi.fn(() => "blob:test") });
         Object.defineProperty(URL, "revokeObjectURL", { configurable: true, value: vi.fn() });
@@ -47,6 +49,7 @@ describe("HtmlPdfExportView scope integration", () => {
         expect(html).toContain("<!doctype html>");
         expect(html).toContain("Visible report");
         expect(html).toContain('data-html-pdf-orientation="portrait"');
+        expect(URL.createObjectURL).not.toHaveBeenCalled();
     });
 
     it.each(["allFiltered", "selected"])("does not fake %s with CurrentView HTML", scope => {
@@ -188,4 +191,104 @@ describe("HtmlPdfExportView scope integration", () => {
         expect(execute).toHaveBeenCalledTimes(1); expect(button.textContent).toBe("Generating Word document...");
         expect(button.closest("[data-html-pdf-export-exclude='true']")).not.toBeNull();
     });
+
+    it("does not auto export by default and retains the manual control", () => {
+        const execute = vi.fn();
+        render(<HtmlPdfExportView {...baseProps({ onExport: { canExecute: true, isExecuting: false, execute } })} />);
+        expect(execute).not.toHaveBeenCalled();
+        expect(screen.getByRole("button", { name: "Export" })).toBeTruthy();
+        fireEvent.click(screen.getByRole("button", { name: "Export" }));
+        expect(execute).toHaveBeenCalledTimes(1);
+        expect(URL.createObjectURL).not.toHaveBeenCalled();
+    });
+
+    it("honors the paint and configurable delay, fires once, and does not download HTML", () => {
+        useAutoTimers();
+        const execute = vi.fn();
+        const props = baseProps({ autoExportOnLoad: true, autoExportDelayMs: 500,
+            onExport: { canExecute: true, isExecuting: false, execute } });
+        const view = render(<HtmlPdfExportView {...props} />);
+        act(() => vi.advanceTimersByTime(515));
+        expect(execute).not.toHaveBeenCalled();
+        act(() => vi.advanceTimersByTime(1));
+        expect(execute).toHaveBeenCalledTimes(1);
+        expect(execute.mock.calls[0][0].HtmlContent).toContain("<!doctype html>");
+        expect(execute.mock.calls[0][0].HtmlContent).toContain("Visible report");
+        expect(URL.createObjectURL).not.toHaveBeenCalled();
+        view.rerender(<HtmlPdfExportView {...baseProps({ ...props, content: <div>Updated report</div> })} />);
+        act(() => vi.advanceTimersByTime(2_000));
+        expect(execute).toHaveBeenCalledTimes(1);
+    });
+
+    it("hides only the export button while auto export still runs", () => {
+        useAutoTimers();
+        const execute = vi.fn();
+        render(<HtmlPdfExportView {...baseProps({ autoExportOnLoad: true, autoExportDelayMs: 0,
+            showExportButton: false, onExport: { canExecute: true, isExecuting: false, execute } })} />);
+        expect(screen.queryByRole("button", { name: "Export" })).toBeNull();
+        expect(screen.getByTestId("content").textContent).toBe("Visible report");
+        act(() => vi.advanceTimersByTime(17));
+        expect(execute).toHaveBeenCalledTimes(1);
+    });
+
+    it("waits for a temporarily unavailable action without retry polling", () => {
+        useAutoTimers();
+        const execute = vi.fn();
+        const action = { canExecute: false, isExecuting: false, execute };
+        const view = render(<HtmlPdfExportView {...baseProps({ autoExportOnLoad: true, autoExportDelayMs: 0, onExport: action })} />);
+        act(() => vi.advanceTimersByTime(17));
+        expect(execute).not.toHaveBeenCalled();
+        view.rerender(<HtmlPdfExportView {...baseProps({ autoExportOnLoad: true, autoExportDelayMs: 0,
+            onExport: { ...action, canExecute: true } })} />);
+        expect(execute).toHaveBeenCalledTimes(1);
+        act(() => vi.advanceTimersByTime(2_000));
+        expect(execute).toHaveBeenCalledTimes(1);
+    });
+
+    it("shows a concise configuration error with hidden controls and never downloads HTML automatically", () => {
+        useAutoTimers();
+        render(<HtmlPdfExportView {...baseProps({ autoExportOnLoad: true, autoExportDelayMs: 0, showExportButton: false })} />);
+        act(() => vi.advanceTimersByTime(17));
+        expect(screen.getByRole("alert").textContent).toContain("Configure the Current View export action");
+        expect(URL.createObjectURL).not.toHaveBeenCalled();
+    });
+
+    it("preserves the manual standalone HTML fallback only when no action is configured", () => {
+        render(<HtmlPdfExportView {...baseProps()} />);
+        fireEvent.click(screen.getByRole("button", { name: "Export" }));
+        expect(URL.createObjectURL).toHaveBeenCalledTimes(1);
+    });
+
+    it("does not double export under repeated effects, but allows a fresh mount", () => {
+        useAutoTimers();
+        const execute = vi.fn();
+        const props = baseProps({ autoExportOnLoad: true, autoExportDelayMs: 0,
+            onExport: { canExecute: true, isExecuting: false, execute } });
+        const view = render(<StrictMode><HtmlPdfExportView {...props} /></StrictMode>);
+        act(() => vi.advanceTimersByTime(17));
+        expect(execute).toHaveBeenCalledTimes(1);
+        view.unmount();
+        render(<HtmlPdfExportView {...props} />);
+        act(() => vi.advanceTimersByTime(17));
+        expect(execute).toHaveBeenCalledTimes(2);
+    });
+
+    it("keeps a manual click from causing a later automatic duplicate", () => {
+        useAutoTimers();
+        const execute = vi.fn();
+        render(<HtmlPdfExportView {...baseProps({ autoExportOnLoad: true, autoExportDelayMs: 500,
+            onExport: { canExecute: true, isExecuting: false, execute } })} />);
+        fireEvent.click(screen.getByRole("button", { name: "Export" }));
+        act(() => vi.advanceTimersByTime(2_000));
+        expect(execute).toHaveBeenCalledTimes(1);
+        expect(URL.createObjectURL).not.toHaveBeenCalled();
+    });
 });
+
+function useAutoTimers(): void {
+    vi.useFakeTimers();
+    Object.defineProperty(window, "requestAnimationFrame", { configurable: true,
+        value: (callback: FrameRequestCallback) => window.setTimeout(() => callback(0), 16) });
+    Object.defineProperty(window, "cancelAnimationFrame", { configurable: true,
+        value: (id: number) => window.clearTimeout(id) });
+}
