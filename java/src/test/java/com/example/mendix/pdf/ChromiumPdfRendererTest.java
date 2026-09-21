@@ -5,19 +5,27 @@ import org.apache.pdfbox.rendering.PDFRenderer;
 import org.apache.pdfbox.text.PDFTextStripper;
 import org.apache.pdfbox.text.TextPosition;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Assumptions;
+import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.api.condition.EnabledOnOs;
+import org.junit.jupiter.api.condition.OS;
 
 import java.awt.image.BufferedImage;
 import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
 
 class ChromiumPdfRendererTest {
+    @TempDir Path tempDirectory;
     private static final String TURKISH = "ç Ç ğ Ğ ı İ ö Ö ş Ş ü Ü Başarılı Çağrı İstanbul Şişli Özgür Güneş";
 
     @Test void preservesBrowserLayoutsAndTurkishUnicode() throws Exception {
         var executable = ChromiumExecutableLocator.requireExecutable();
+        assumeBrowserOperational(executable);
         String html = """
             <!doctype html><html lang="tr" data-html-pdf-source-width="1804" data-html-pdf-source-height="920" data-html-pdf-orientation="landscape"><head><meta charset="UTF-8"><style>
             body{font-family:Arial,sans-serif}.section{background:#1261a0;color:#fff;padding:12px;border:4px solid #d33682}
@@ -76,6 +84,7 @@ class ChromiumPdfRendererTest {
 
     @Test void supportsAutoPortraitAndLandscapeConfiguration() throws Exception {
         var executable = ChromiumExecutableLocator.requireExecutable();
+        assumeBrowserOperational(executable);
         String html = "<!doctype html><html><head><meta charset='UTF-8'></head><body>Orientation</body></html>";
         for (ChromiumPdfOptions.Orientation orientation : List.of(ChromiumPdfOptions.Orientation.AUTO, ChromiumPdfOptions.Orientation.PORTRAIT)) {
             String orientedHtml = orientation == ChromiumPdfOptions.Orientation.AUTO
@@ -107,6 +116,130 @@ class ChromiumPdfRendererTest {
         assertTrue(widePlan.landscapeScale() > widePlan.portraitScale());
         assertEquals(widePlan.landscapeScale(), widePlan.scale());
         assertEquals(widePlan, ChromiumPdfRenderer.planFor(wide, options));
+    }
+
+    @Test void commandUsesIsolatedWindowsCompatibleArgumentsAndSeparatePaths() throws Exception {
+        Path browser = Files.createFile(tempDirectory.resolve("browser with spaces.exe"));
+        var renderer = new ChromiumPdfRenderer(browser, ChromiumPdfOptions.defaults());
+        var plan = ChromiumPdfRenderer.planFor("<html></html>", ChromiumPdfOptions.defaults());
+        Path input = tempDirectory.resolve("input with spaces.html");
+        Path output = tempDirectory.resolve("output with spaces.pdf");
+        Path profileA = tempDirectory.resolve("profile one");
+        Path profileB = tempDirectory.resolve("profile two");
+        List<String> commandA = renderer.command(input, output, profileA, plan);
+        List<String> commandB = renderer.command(input, output, profileB, plan);
+        assertEquals(browser.toAbsolutePath().toString(), commandA.get(0));
+        for (String flag : List.of("--headless=new", "--disable-gpu", "--no-first-run", "--no-default-browser-check"))
+            assertTrue(commandA.contains(flag), flag);
+        assertTrue(commandA.contains("--user-data-dir=" + profileA));
+        assertTrue(commandA.contains("--print-to-pdf=" + output));
+        assertEquals(input.toUri().toASCIIString(), commandA.get(commandA.size() - 1));
+        assertNotEquals(commandA, commandB);
+        assertFalse(commandA.contains("--no-sandbox"));
+    }
+
+    @Test void windowsDiscoveryIncludesBothEdgeInstallLocationsBeforeChrome() {
+        List<String> candidates = ChromiumExecutableLocator.windowsCandidates(null, null, null);
+        assertEquals("C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe", candidates.get(0));
+        assertEquals("C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe", candidates.get(1));
+        assertTrue(candidates.indexOf("C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe") <
+            candidates.indexOf("C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe"));
+        assertEquals("HTML_PDF_CHROMIUM_PATH", ChromiumExecutableLocator.ENVIRONMENT_VARIABLE);
+    }
+
+    @Test void environmentBrowserOverrideTakesPrecedence() throws Exception {
+        Path configured = Files.createFile(tempDirectory.resolve("configured browser.exe"));
+        Path property = Files.createFile(tempDirectory.resolve("property browser.exe"));
+        assertEquals(configured.toAbsolutePath(), ChromiumExecutableLocator.locate(configured.toString(), property.toString()).orElseThrow());
+    }
+
+    @Test @EnabledOnOs(OS.WINDOWS) void nonzeroExitCapturesBothStreamsAndCleansProfile() throws Exception {
+        Path script = batch("echo STDOUT_MARKER & echo STDERR_MARKER 1>&2 & exit /b 7");
+        IOException error = assertThrows(IOException.class,
+            () -> new ChromiumPdfRenderer(script, ChromiumPdfOptions.defaults()).render("<html>test</html>", null));
+        assertTrue(error.getMessage().contains("exit code 7"), error.getMessage());
+        assertTrue(error.getMessage().contains("STDOUT_MARKER"), error.getMessage());
+        assertTrue(error.getMessage().contains("STDERR_MARKER"), error.getMessage());
+        assertTrue(error.getMessage().contains("browser=" + script), error.getMessage());
+        assertFalse(Files.exists(profilePath(error.getMessage())));
+    }
+
+    @Test @EnabledOnOs(OS.WINDOWS) void missingPdfAfterSuccessfulExitFails() throws Exception {
+        Path script = batch("echo NO_PDF & exit /b 0");
+        IOException error = assertThrows(IOException.class,
+            () -> new ChromiumPdfRenderer(script, ChromiumPdfOptions.defaults()).render("<html>test</html>", null));
+        assertTrue(error.getMessage().contains("non-empty PDF"), error.getMessage());
+        assertTrue(error.getMessage().contains("NO_PDF"), error.getMessage());
+    }
+
+    @Test void zeroBytePdfIsRejected() throws Exception {
+        Path empty = Files.createFile(tempDirectory.resolve("empty.pdf"));
+        IOException error = assertThrows(IOException.class, () -> ChromiumPdfRenderer.validatePdf(empty, "exit code 0"));
+        assertTrue(error.getMessage().contains("non-empty PDF"));
+    }
+
+    @Test @EnabledOnOs(OS.WINDOWS) void concurrentRendersUseDifferentProfiles() throws Exception {
+        Path script = batch("exit /b 9");
+        var renderer = new ChromiumPdfRenderer(script, ChromiumPdfOptions.defaults());
+        var first = java.util.concurrent.CompletableFuture.supplyAsync(() -> failureMessage(renderer));
+        var second = java.util.concurrent.CompletableFuture.supplyAsync(() -> failureMessage(renderer));
+        String firstMessage = first.get();
+        String secondMessage = second.get();
+        assertNotEquals(profilePath(firstMessage), profilePath(secondMessage));
+        assertFalse(Files.exists(profilePath(firstMessage)));
+        assertFalse(Files.exists(profilePath(secondMessage)));
+    }
+
+    private static String failureMessage(ChromiumPdfRenderer renderer) {
+        try { renderer.render("<html>test</html>", null); }
+        catch (IOException exception) { return exception.getMessage(); }
+        throw new AssertionError("The fake browser must fail");
+    }
+
+    @Test @EnabledOnOs(OS.WINDOWS) void timeoutTerminatesProcessAndCleansProfile() throws Exception {
+        Path script = batch("ping -n 20 127.0.0.1 >nul");
+        ChromiumPdfOptions defaults = ChromiumPdfOptions.defaults();
+        ChromiumPdfOptions shortTimeout = new ChromiumPdfOptions(defaults.pageSize(), defaults.orientation(),
+            defaults.marginTopMm(), defaults.marginRightMm(), defaults.marginBottomMm(), defaults.marginLeftMm(),
+            defaults.scale(), defaults.printBackgrounds(), defaults.loadWaitMilliseconds(), 1);
+        IOException error = assertThrows(IOException.class,
+            () -> new ChromiumPdfRenderer(script, shortTimeout).render("<html>test</html>", null));
+        assertTrue(error.getMessage().contains("timed out"), error.getMessage());
+        assertFalse(Files.exists(profilePath(error.getMessage())));
+    }
+
+    private Path batch(String command) throws IOException {
+        Path script = tempDirectory.resolve("fake browser with spaces.cmd");
+        Files.writeString(script, "@echo off\r\n" + command + "\r\n");
+        return script;
+    }
+
+    private void assumeBrowserOperational(Path executable) throws Exception {
+        Path probeDirectory = Files.createTempDirectory("html-pdf-browser-probe-");
+        Path profile = probeDirectory.resolve("profile");
+        Path output = probeDirectory.resolve("probe.pdf");
+        Path input = Path.of("src", "test", "resources", "chromium-smoke.html").toAbsolutePath();
+        boolean operational;
+        try {
+            Process process = new ProcessBuilder(executable.toString(), "--headless=new", "--disable-gpu", "--no-first-run",
+                "--no-default-browser-check", "--user-data-dir=" + profile, "--print-to-pdf=" + output,
+                input.toUri().toASCIIString()).start();
+            boolean exited = process.waitFor(15, java.util.concurrent.TimeUnit.SECONDS);
+            if (!exited) process.destroyForcibly();
+            operational = exited && Files.isRegularFile(output) && Files.size(output) > 0;
+        } finally {
+            try (var paths = Files.walk(probeDirectory)) {
+                paths.sorted(java.util.Comparator.reverseOrder()).forEach(path -> {
+                    try { Files.deleteIfExists(path); } catch (IOException ignored) { }
+                });
+            }
+        }
+        Assumptions.assumeTrue(operational,
+            "Local browser does not produce a PDF even with the verified minimal command");
+    }
+
+    private static Path profilePath(String message) {
+        return Path.of(message.substring(message.indexOf("profile=") + 8, message.indexOf("; stdout=")));
     }
 
     private static int countColor(BufferedImage image, int red, int green, int blue, int tolerance) {

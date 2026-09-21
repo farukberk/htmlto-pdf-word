@@ -14,16 +14,19 @@ public final class ChromiumExecutableLocator {
     private ChromiumExecutableLocator() {}
 
     public static Optional<Path> locate() {
+        return locate(System.getenv(ENVIRONMENT_VARIABLE), System.getProperty(SYSTEM_PROPERTY));
+    }
+
+    static Optional<Path> locate(String environmentOverride, String propertyOverride) {
         List<String> candidates = new ArrayList<>();
-        addIfPresent(candidates, System.getProperty(SYSTEM_PROPERTY));
-        addIfPresent(candidates, System.getenv(ENVIRONMENT_VARIABLE));
+        addIfPresent(candidates, environmentOverride);
+        addIfPresent(candidates, propertyOverride);
 
         if (System.getProperty("os.name", "").toLowerCase(Locale.ROOT).contains("win")) {
-            addWindowsCandidates(candidates, System.getenv("ProgramFiles"));
-            addWindowsCandidates(candidates, System.getenv("ProgramFiles(x86)"));
-            addWindowsCandidates(candidates, System.getenv("LOCALAPPDATA"));
+            candidates.addAll(windowsCandidates(System.getenv("ProgramFiles"), System.getenv("ProgramFiles(x86)"),
+                System.getenv("LOCALAPPDATA")));
         } else {
-            for (String name : List.of("google-chrome", "google-chrome-stable", "chromium", "chromium-browser", "microsoft-edge")) {
+            for (String name : List.of("microsoft-edge", "google-chrome", "google-chrome-stable", "chromium", "chromium-browser")) {
                 findOnPath(name).ifPresent(path -> candidates.add(path.toString()));
             }
         }
@@ -37,11 +40,27 @@ public final class ChromiumExecutableLocator {
             " or environment variable " + ENVIRONMENT_VARIABLE + " to a Chrome, Edge, or Chromium executable."));
     }
 
-    private static void addWindowsCandidates(List<String> candidates, String root) {
+    static List<String> windowsCandidates(String programFiles, String programFilesX86, String localAppData) {
+        List<String> candidates = new ArrayList<>();
+        List<String> roots = List.of(
+            nonBlankOrDefault(programFiles, "C:\\Program Files"),
+            nonBlankOrDefault(programFilesX86, "C:\\Program Files (x86)"));
+        for (String root : roots) addWindowsCandidate(candidates, root, "Microsoft", "Edge", "Application", "msedge.exe");
+        addWindowsCandidate(candidates, localAppData, "Microsoft", "Edge", "Application", "msedge.exe");
+        for (String root : roots) addWindowsCandidate(candidates, root, "Google", "Chrome", "Application", "chrome.exe");
+        addWindowsCandidate(candidates, localAppData, "Google", "Chrome", "Application", "chrome.exe");
+        for (String root : roots) addWindowsCandidate(candidates, root, "Chromium", "Application", "chrome.exe");
+        addWindowsCandidate(candidates, localAppData, "Chromium", "Application", "chrome.exe");
+        return candidates;
+    }
+
+    private static String nonBlankOrDefault(String value, String fallback) {
+        return value == null || value.isBlank() ? fallback : value;
+    }
+
+    private static void addWindowsCandidate(List<String> candidates, String root, String... parts) {
         if (root == null || root.isBlank()) return;
-        candidates.add(Path.of(root, "Microsoft", "Edge", "Application", "msedge.exe").toString());
-        candidates.add(Path.of(root, "Google", "Chrome", "Application", "chrome.exe").toString());
-        candidates.add(Path.of(root, "Chromium", "Application", "chrome.exe").toString());
+        candidates.add(Path.of(root, parts).toString());
     }
 
     private static Optional<Path> findOnPath(String executable) {

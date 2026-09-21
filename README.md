@@ -1515,6 +1515,16 @@ HTML_PDF_CHROMIUM_PATH
 
 tanımlayın.
 
+### Corporate Windows / Chromium troubleshooting
+
+On Windows, first confirm that Edge can print a small local HTML file outside Mendix. For example, replace the two input/output paths below with writable locations and run:
+
+```powershell
+& 'C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe' --headless=new --disable-gpu --no-first-run --no-default-browser-check '--user-data-dir=C:\Temp\HtmlPdfTest\profile' '--print-to-pdf=C:\Temp\HtmlPdfTest\test.pdf' 'file:///C:/Temp/HtmlPdfTest/test.html'
+```
+
+The renderer automatically discovers Edge (including both Program Files locations), then Chrome or Chromium. Set `HTML_PDF_CHROMIUM_PATH` to the full browser executable path only when auto-discovery is unsuitable. A profile-lock or running-Edge conflict can make the browser exit without producing a PDF; each export now uses a unique temporary `--user-data-dir` and removes it after rendering when possible. Windows does not need `--no-sandbox`; do not add it to bypass corporate security controls. Failed renders report the selected browser, exit status, temporary paths, and abbreviated stdout/stderr without logging the HTML document.
+
 ---
 
 ## Widget görünmüyor

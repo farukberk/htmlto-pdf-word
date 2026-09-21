@@ -14,6 +14,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 public final class ChromiumPdfRenderer implements PdfRenderer {
+    private static final int MAX_DIAGNOSTIC_BYTES = 12 * 1024;
     private static final double CSS_PIXELS_PER_MM = 96.0 / 25.4;
     private static final Pattern SOURCE_WIDTH = metadataPattern("source-width");
     private static final Pattern SOURCE_HEIGHT = metadataPattern("source-height");
@@ -39,29 +40,35 @@ public final class ChromiumPdfRenderer implements PdfRenderer {
         Path htmlFile = workDirectory.resolve("document.html");
         Path pdfFile = workDirectory.resolve("document.pdf");
         Path profileDirectory = workDirectory.resolve("profile");
+        Path stdoutFile = workDirectory.resolve("chromium.stdout.log");
+        Path stderrFile = workDirectory.resolve("chromium.stderr.log");
         try {
             Files.createDirectory(profileDirectory);
             RenderPlan plan = planFor(html, options);
             Files.writeString(htmlFile, prepareHtml(html, baseUri, plan), StandardCharsets.UTF_8);
 
             Process process = new ProcessBuilder(command(htmlFile, pdfFile, profileDirectory, plan))
-                .redirectOutput(ProcessBuilder.Redirect.DISCARD)
-                .redirectError(ProcessBuilder.Redirect.DISCARD)
+                .redirectOutput(stdoutFile.toFile())
+                .redirectError(stderrFile.toFile())
                 .start();
             boolean completed;
             try { completed = process.waitFor(options.processTimeoutSeconds(), TimeUnit.SECONDS); }
             catch (InterruptedException exception) {
                 Thread.currentThread().interrupt();
-                process.destroyForcibly();
-                throw new IOException("Interrupted while waiting for Chromium PDF rendering", exception);
+                terminate(process);
+                throw new IOException("Interrupted while waiting for Chromium PDF rendering: " +
+                    diagnostics("interrupted", htmlFile, pdfFile, profileDirectory, stdoutFile, stderrFile), exception);
             }
             if (!completed) {
-                process.destroyForcibly();
-                throw new IOException("Chromium PDF rendering timed out after " + options.processTimeoutSeconds() + " seconds");
+                terminate(process);
+                throw new IOException("Chromium PDF rendering timed out after " + options.processTimeoutSeconds() +
+                    " seconds: " + diagnostics("timeout", htmlFile, pdfFile, profileDirectory, stdoutFile, stderrFile));
             }
-            if (process.exitValue() != 0 || !Files.isRegularFile(pdfFile)) {
-                throw new IOException("Chromium PDF rendering failed with exit code " + process.exitValue());
+            if (process.exitValue() != 0) {
+                throw new IOException("Chromium PDF rendering failed: " +
+                    diagnostics("exit code " + process.exitValue(), htmlFile, pdfFile, profileDirectory, stdoutFile, stderrFile));
             }
+            validatePdf(pdfFile, diagnostics("exit code 0", htmlFile, pdfFile, profileDirectory, stdoutFile, stderrFile));
             try (var input = Files.newInputStream(pdfFile)) { input.transferTo(output); }
             output.flush();
         } finally {
@@ -69,18 +76,13 @@ public final class ChromiumPdfRenderer implements PdfRenderer {
         }
     }
 
-    private List<String> command(Path htmlFile, Path pdfFile, Path profileDirectory, RenderPlan plan) {
+    List<String> command(Path htmlFile, Path pdfFile, Path profileDirectory, RenderPlan plan) {
         List<String> command = new ArrayList<>();
         command.add(executable.toString());
         command.add("--headless=new");
         command.add("--disable-gpu");
-        command.add("--disable-background-networking");
-        command.add("--disable-component-update");
-        command.add("--disable-default-apps");
         command.add("--no-first-run");
         command.add("--no-default-browser-check");
-        command.add("--run-all-compositor-stages-before-draw");
-        command.add("--force-device-scale-factor=1");
         command.add("--window-size=" + plan.viewportWidth() + "," + plan.viewportHeight());
         command.add("--virtual-time-budget=" + options.loadWaitMilliseconds());
         command.add("--user-data-dir=" + profileDirectory);
@@ -158,6 +160,44 @@ public final class ChromiumPdfRenderer implements PdfRenderer {
 
     private static String escapeAttribute(String value) {
         return value.replace("&", "&amp;").replace("\"", "&quot;").replace("<", "&lt;");
+    }
+
+    private String diagnostics(String status, Path htmlFile, Path pdfFile, Path profileDirectory,
+                               Path stdoutFile, Path stderrFile) {
+        return status + "; browser=" + executable + "; input=" + htmlFile + "; output=" + pdfFile +
+            "; profile=" + profileDirectory + "; stdout=" + abbreviatedOutput(stdoutFile) +
+            "; stderr=" + abbreviatedOutput(stderrFile);
+    }
+
+    private static String abbreviatedOutput(Path file) {
+        try (var input = Files.newInputStream(file)) {
+            byte[] bytes = input.readNBytes(MAX_DIAGNOSTIC_BYTES + 1);
+            String value = new String(bytes, 0, Math.min(bytes.length, MAX_DIAGNOSTIC_BYTES), StandardCharsets.UTF_8);
+            return value + (bytes.length > MAX_DIAGNOSTIC_BYTES ? " [truncated]" : "");
+        } catch (IOException exception) {
+            return "[unavailable: " + exception.getMessage() + "]";
+        }
+    }
+
+    static void validatePdf(Path pdfFile, String diagnostics) throws IOException {
+        if (!Files.isRegularFile(pdfFile) || Files.size(pdfFile) == 0)
+            throw new IOException("Chromium did not produce a non-empty PDF: " + diagnostics);
+    }
+
+    private static void terminate(Process process) {
+        process.descendants().forEach(child -> child.destroy());
+        process.destroy();
+        try {
+            if (!process.waitFor(2, TimeUnit.SECONDS)) {
+                process.descendants().forEach(child -> child.destroyForcibly());
+                process.destroyForcibly();
+                process.waitFor(2, TimeUnit.SECONDS);
+            }
+        } catch (InterruptedException exception) {
+            Thread.currentThread().interrupt();
+            process.descendants().forEach(child -> child.destroyForcibly());
+            process.destroyForcibly();
+        }
     }
 
     private static void deleteTree(Path root) {
