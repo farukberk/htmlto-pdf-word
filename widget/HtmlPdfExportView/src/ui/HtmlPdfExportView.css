@@ -1,0 +1,36 @@
+.html-pdf-export-runtime-controls {
+    display: flex;
+    align-items: flex-end;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 8px;
+}
+
+.html-pdf-export-runtime-controls label {
+    display: inline-flex;
+    flex-direction: column;
+    gap: 2px;
+    margin: 0;
+    font-size: 0.875em;
+}
+
+.html-pdf-export-runtime-controls select {
+    min-width: 112px;
+    min-height: 32px;
+    padding: 4px 28px 4px 8px;
+}
+
+.html-pdf-export-runtime-controls button {
+    min-height: 32px;
+}
+
+.html-pdf-export-runtime-controls button:focus-visible,
+.html-pdf-export-runtime-controls select:focus-visible {
+    outline: 2px solid currentColor;
+    outline-offset: 2px;
+}
+
+.html-pdf-export-runtime-controls [role="alert"] {
+    flex-basis: 100%;
+    color: var(--brand-danger, #a94442);
+}

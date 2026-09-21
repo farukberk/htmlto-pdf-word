@@ -1,0 +1,9 @@
+{
+  "title": "Türkçe Örnek Rapor: ç Ç ğ Ğ ı İ ö Ö ş Ş ü Ü",
+  "customer": { "name": "Örnek Müşteri", "city": "İstanbul" },
+  "rows": [
+    { "id": 1, "description": "Birinci satır", "amount": 1250.50 },
+    { "id": 2, "description": "İkinci satır", "amount": 87.25 },
+    { "id": 3, "description": "Üçüncü satır", "amount": 900.00 }
+  ]
+}

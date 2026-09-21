@@ -1,0 +1,19 @@
+.tools/
+**/node_modules/
+**/target/
+**/dist/
+widget/HtmlPdfExportView/.compat-tmp/
+widget/HtmlPdfExportView/testProject/
+
+# Keep release deliverables and measured results, not large generated PDFs.
+!/dist/
+/dist/*
+!/dist/HtmlPdfExport.HtmlPdfExportView.mpk
+!/dist/html-pdf-export-1.0.0-all.jar
+!/dist/*results.csv
+!/dist/*results.md
+!/dist/word-stress-output/
+/dist/word-stress-output/*
+!/dist/word-stress-output/word-100.docx
+!/dist/word-stress-output/word-5000.docx
+!/dist/word-stress-output/word-largest-success.docx

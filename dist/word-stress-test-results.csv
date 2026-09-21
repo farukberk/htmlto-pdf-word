@@ -1,0 +1,6 @@
+rows,html_generation_ms,docx_render_ms,docx_bytes,heap_delta_bytes,success,first_marker,last_marker,table_rows
+100,2,69,3958,0,PASS,true,true,101
+1000,7,264,11003,16360880,PASS,true,true,1001
+5000,9,982,41959,107064600,PASS,true,true,5001
+10000,22,1130,80069,87220704,PASS,true,true,10001
+25000,18,4170,195177,180369120,PASS,true,true,25001

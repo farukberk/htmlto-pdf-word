@@ -1,0 +1,108 @@
+<?xml version="1.0" encoding="utf-8"?>
+<widget id="HtmlPdfExport.HtmlPdfExportView.HtmlPdfExportView" pluginWidget="true" needsEntityContext="false" offlineCapable="true"
+        supportedPlatform="Web" xmlns="http://www.mendix.com/widget/1.0/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.mendix.com/widget/1.0/ ../node_modules/mendix/custom_widget.xsd">
+    <name>HTML PDF Export View</name>
+    <description>Transparent export boundary for rendered Mendix content.</description>
+    <icon/>
+    <properties>
+        <propertyGroup caption="Content">
+            <property key="content" type="widgets" required="true">
+                <caption>Content</caption><description>Widgets inside the export boundary. Current View captures only the content currently rendered here; FullData scopes use the configured report integration.</description>
+            </property>
+        </propertyGroup>
+        <propertyGroup caption="General">
+            <property key="exportFormat" type="enumeration" defaultValue="pdf">
+                <caption>Export Format</caption><description>Selects the output format. PDF targets fixed visual fidelity; Word creates editable semantic content. PDF is the default. Current View Word exports use a cleaned editable representation, while FullData Word exports use the application-supplied JSON and FreeMarker template.</description>
+                <enumerationValues><enumerationValue key="pdf">PDF</enumerationValue><enumerationValue key="word">Word (.docx)</enumerationValue></enumerationValues>
+            </property>
+            <property key="appearanceMode" type="enumeration" defaultValue="exactView">
+                <caption>Appearance Mode</caption>
+                <description>Exact View is the highest-fidelity screen representation and preserves layout, controls, colors, spacing, current form state, and Mendix/Atlas/custom styling. Clean Report preserves that styling and source layout but converts values to printable content and removes safe interaction-only controls; it does not rebuild the page.</description>
+                <enumerationValues>
+                    <enumerationValue key="exactView">Exact View</enumerationValue>
+                    <enumerationValue key="cleanReport">Clean Report</enumerationValue>
+                </enumerationValues>
+            </property>
+            <property key="exportScope" type="enumeration" defaultValue="currentView">
+                <caption>Export Scope</caption><description>Current View exports only content currently rendered inside the boundary; it does not click pages or load virtualized records. All Filtered exports the complete filtered dataset supplied by the host application, independently of UI pagination. Selected exports the dataset selected and supplied by the host. FullData scopes require Report JSON, Template Content, and a FullData Export Action and never fall back silently to Current View.</description>
+                <enumerationValues>
+                    <enumerationValue key="currentView">Current View</enumerationValue>
+                    <enumerationValue key="allFiltered">All Filtered</enumerationValue>
+                    <enumerationValue key="selected">Selected</enumerationValue>
+                </enumerationValues>
+            </property>
+        </propertyGroup>
+        <propertyGroup caption="PDF">
+            <property key="pdfOrientation" type="enumeration" defaultValue="portrait">
+                <caption>PDF Orientation</caption>
+                <description>Portrait produces vertical A4 output and is the default. Landscape produces horizontal A4 output. Auto chooses from captured source geometry. Exact View establishes the source layout first, then proportionally fits it into the selected orientation before Chromium renders the PDF.</description>
+                <enumerationValues>
+                    <enumerationValue key="portrait">Portrait</enumerationValue>
+                    <enumerationValue key="landscape">Landscape</enumerationValue>
+                    <enumerationValue key="auto">Auto</enumerationValue>
+                </enumerationValues>
+            </property>
+        </propertyGroup>
+        <propertyGroup caption="Runtime Export UI">
+            <property key="showExportButton" type="boolean" defaultValue="true"><caption>Show Export Button</caption><description>Shows the widget's compact runtime export control. Disable it when export is triggered by another page control; the widget UI is always excluded from captured output.</description></property>
+            <property key="buttonCaption" type="string" defaultValue="Export PDF"><caption>Export Button Caption</caption><description>Accessible text displayed on the primary runtime export button. The default is Export PDF.</description></property>
+            <property key="showRuntimeAppearanceSelector" type="boolean" defaultValue="false"><caption>Show Runtime Appearance Selector</caption><description>Allows users to choose Exact View or Clean Report for the current component session. Disabled by default because appearance is application-specific; it changes no permanent Studio Pro configuration.</description></property>
+            <property key="showRuntimeScopeSelector" type="boolean" defaultValue="false"><caption>Show Runtime Scope Selector</caption><description>Allows users to choose Current View, All Filtered, or Selected. Disabled by default. FullData choices are disabled when their required JSON, template, or action is unavailable and never fall back to Current View.</description></property>
+            <property key="showRuntimeOrientationSelector" type="boolean" defaultValue="true"><caption>Show Runtime Orientation Selector</caption><description>Allows users to choose Portrait, Landscape, or Auto before export. Enabled by default. The choice controls orientation metadata before Chromium rendering and does not rotate a completed PDF.</description></property>
+            <property key="showRuntimeFormatSelector" type="boolean" defaultValue="false"><caption>Show Runtime Format Selector</caption><description>Allows users to choose PDF or Word for the current component session. Disabled by default to keep the runtime UI compact. It overrides the Studio Pro Export Format without changing permanent configuration.</description></property>
+        </propertyGroup>
+        <propertyGroup caption="Full Data">
+            <property key="onExport" type="action" required="false">
+                <caption>Current View Export Action</caption>
+                <description>Optional action executed after Current View creates the complete standalone HTML document. Map HtmlContent to the existing PDF conversion flow. Leave empty only when an HTML download without an application action is intended.</description>
+                <actionVariables>
+                    <actionVariable key="HtmlContent" type="String" caption="Generated HTML" />
+                </actionVariables>
+            </property>
+            <property key="onWordExport" type="action" required="false">
+                <caption>Current View Word Export Action</caption>
+                <description>Application action for Current View Word export. It receives cleaned standalone semantic HTML plus Portrait, Landscape, or Auto orientation and should store the generated .docx in a System.FileDocument. Leave empty only when Word format is unavailable.</description>
+                <actionVariables><actionVariable key="HtmlContent" type="String" caption="Editable HTML"/><actionVariable key="Orientation" type="String" caption="Word orientation"/></actionVariables>
+            </property>
+            <property key="fullDataJson" type="expression" required="false">
+                <caption>Report JSON</caption>
+                <description>Application-defined JSON model consumed by the FullData FreeMarker template, for example { "report": { "title": "Monthly Report" }, "rows": [...] }. Current View does not use this property. All Filtered and Selected normally require it.</description>
+                <returnType type="String" />
+            </property>
+            <property key="fullDataTemplate" type="expression" required="false">
+                <caption>Template Content</caption>
+                <description>FreeMarker HTML template that combines Report JSON with HTML and CSS before Chromium PDF rendering. This FullData template is separate from Current View DOM capture and is required for All Filtered and Selected.</description>
+                <returnType type="String" />
+            </property>
+            <property key="onFullDataExport" type="action" required="false">
+                <caption>FullData Export Action</caption>
+                <description>Application integration point for All Filtered and Selected. The host supplies the complete intended report independently from visible UI pagination. Map ReportJson, TemplateContent, ExportScope, and batching values to the FullData Java Action; this contract is generic and not DataGrid2-specific.</description>
+                <actionVariables>
+                    <actionVariable key="ReportJson" type="String" caption="Report JSON" />
+                    <actionVariable key="TemplateContent" type="String" caption="FreeMarker template" />
+                    <actionVariable key="ExportScope" type="String" caption="Export scope" />
+                    <actionVariable key="BatchMode" type="String" caption="Batch mode" />
+                    <actionVariable key="BatchSize" type="Integer" caption="Batch size" />
+                    <actionVariable key="BatchCollectionPath" type="String" caption="Batch collection path" />
+                </actionVariables>
+            </property>
+            <property key="onFullDataWordExport" type="action" required="false">
+                <caption>FullData Word Export Action</caption>
+                <description>Application integration point for All Filtered and Selected Word exports. It receives complete application-supplied Report JSON, FreeMarker template, scope, and orientation; it is independent from DataGrid pagination and never falls back to Current View.</description>
+                <actionVariables><actionVariable key="ReportJson" type="String" caption="Report JSON"/><actionVariable key="TemplateContent" type="String" caption="FreeMarker template"/><actionVariable key="ExportScope" type="String" caption="Export scope"/><actionVariable key="Orientation" type="String" caption="Word orientation"/></actionVariables>
+            </property>
+        </propertyGroup>
+        <propertyGroup caption="Large Exports">
+            <property key="batchMode" type="enumeration" defaultValue="auto"><caption>Batch Mode</caption><description>Off renders the complete FullData collection in one Chromium operation. Auto, the default, batches when the configured collection exceeds Batch Size. Always currently applies the same deterministic threshold behavior. Batching reduces per-render pressure and merges temporary PDFs into one output.</description><enumerationValues><enumerationValue key="off">Off</enumerationValue><enumerationValue key="auto">Auto</enumerationValue><enumerationValue key="always">Always</enumerationValue></enumerationValues></property>
+            <property key="batchSize" type="integer" defaultValue="5000"><caption>Batch Size</caption><description>Maximum records rendered in one FullData Chromium batch. Default 5000 is conservative and tested. Smaller values reduce per-render pressure but create more temporary PDFs; larger values reduce batch count but increase Chromium resource pressure. No value is guaranteed safe on every environment. Allowed range: 100 through 25000.</description></property>
+            <property key="batchCollectionPath" type="string" defaultValue="rows"><caption>Batch Collection Path</caption><description>Dotted path to the application-defined JSON array to batch, such as rows, report.rows, data.transactions, or data.employees. The target must resolve to an array and does not need to be named rows. Required when batching is not Off.</description></property>
+        </propertyGroup>
+        <propertyGroup caption="Advanced">
+            <property key="fileName" type="string" defaultValue="export.html"><caption>Current View HTML File Name</caption><description>File name used by the optional browser HTML download in Current View, including an .html extension. It does not name the server-created PDF. Default: export.html.</description></property>
+            <property key="includeStyles" type="boolean" defaultValue="true"><caption>Include Styles</caption><description>Collects accessible page stylesheets, including Atlas, compiled theme SCSS, custom CSS, variables, fonts, colors, flex, and grid rules. Enabled by default; disabling it reduces Current View visual fidelity.</description></property>
+            <property key="includeImages" type="boolean" defaultValue="true"><caption>Include Images</caption><description>Retains image and inline SVG content and serializes accessible canvases in Current View. Enabled by default. Cross-origin canvas restrictions may prevent individual canvas serialization.</description></property>
+            <property key="debugMode" type="boolean" defaultValue="false"><caption>Debug Mode</caption><description>Logs technical metadata such as captured dimensions, selected orientation, scale, export scope, and batching configuration. Disabled by default. It never logs business JSON, HTML contents, form values, report data, or document text.</description></property>
+        </propertyGroup>
+    </properties>
+</widget>

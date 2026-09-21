@@ -1,0 +1,13 @@
+phase,rowCount,dataBuildMs,jsonSizeBytes,htmlRenderMs,htmlSizeBytes,pdfRenderMs,totalMs,pdfSizeBytes,success,failureStage,exceptionClass,exceptionMessage,memoryBeforeMB,memoryAfterHtmlMB,memoryAfterPdfMB,peakMemoryMB,htmlFirstMarker,htmlLastMarker,pdfFirstMarker,pdfLastMarker
+"Phase 1",100,0,0,286,22006,1229,2195,292571,true,"","","",2,14,18,18,true,true,true,true
+"Phase 1",1000,0,0,37,210337,1921,2584,2479222,true,"","","",7,13,18,18,true,true,true,true
+"Phase 1",5000,0,0,45,1063337,6122,8906,12340784,true,"","","",14,41,62,62,true,true,true,true
+"Phase 1",10000,0,0,149,2130842,16106,18605,24850822,true,"","","",47,98,67,98,true,true,true,true
+"Phase 1",25000,0,0,70,5389592,59963,67931,62642030,true,"","","",84,115,213,213,true,true,true,true
+"Phase 1",50000,0,0,88,10820842,0,55358,0,false,"RENDER_OR_VALIDATE","java.io.IOException","Chromium PDF rendering failed with exit code 0",197,259,0,259,true,true,false,false
+"Phase 2",100,1,19888,489,22006,1794,2478,292571,true,"","","",5,19,20,20,true,true,true,true
+"Phase 2",1000,4,201017,17,210337,2210,3154,2479222,true,"","","",7,16,21,21,true,true,true,true
+"Phase 2",5000,17,1018017,57,1063337,6649,9326,12340784,true,"","","",15,56,77,77,true,true,true,true
+"Phase 2",10000,35,2040522,56,2130842,17692,23264,24850822,true,"","","",48,126,92,126,true,true,true,true
+"Phase 2",25000,90,5164272,120,5389592,62589,76502,62642030,true,"","","",87,128,139,139,true,true,true,true
+"Phase 2",50000,172,10370522,196,10820842,0,54572,0,false,"RENDER_OR_VALIDATE","java.io.IOException","Chromium PDF rendering failed with exit code 0",204,381,0,381,true,true,false,false
