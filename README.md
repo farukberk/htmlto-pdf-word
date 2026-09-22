@@ -1349,6 +1349,18 @@ Runtime Orientation   : On
 
 For a one-click PDF preview page, let the normal Mendix button open a page containing the widget and report content. Configure **Export Scope = Current View**, **Auto Export On Load = Yes**, **Auto Export Delay (ms) = 500**, **Show Export Button = No**, and map **Current View Export Action** to the HTML-to-PDF microflow. The widget captures after a browser paint and the configured delay, invokes the action once per mount, and does not download an extra `.html` file. Increase the delay for asynchronously rendered content; normal manual exports remain immediate. The widget does not automatically close the preview page.
 
+### Two-stage PDF delivery in Mendix
+
+Some environments abort the HTTP connection when PDF generation and **Download File** run within the same widget-triggered Mendix request. Use separate actions: Current View capture → generate and commit `GeneratedExportFile` → wait for the first action's execution lifecycle to finish → retrieve the exact file by `ExportKey` → Download File. Do not put Download File in the generation microflow.
+
+In Studio Pro, manually add `GeneratedExportFile.ExportKey` as a String (recommended length at least 100). The widget creates a fresh key per export and sends it with the complete standalone HTML to `ACT_CurrentViewToPdf(HtmlContent: String, ExportKey: String)`. In that microflow, create `GeneratedExportFile` with a PDF name such as `'AuditReport-' + formatDateTime([%CurrentDateTime%], 'yyyyMMdd-HHmmss') + '.pdf'` and `ExportKey = $ExportKey`; call `JA_ConvertHtmlToPdf` with `Html = $HtmlContent`, `BaseUri = ''`, and `OutputFile = $OutputFile`; commit `$OutputFile`; then end. **Do not Download File here.**
+
+Create `ACT_OpenGeneratedPdf(ExportKey: String)` as the second microflow. Retrieve the first `GeneratedExportFile` from the database with XPath `[ExportKey = $ExportKey]`. If found, use Mendix **Download File** on that object with **Show file in browser = Yes**. If absent, show or log "Generated PDF could not be found." Never retrieve an unrestricted "latest file". Keep entity access rules intact; production apps may additionally associate generated files with a report, user, or session for authorization, retention, and cleanup. An AuditechReport association is not required for key matching. Browser and corporate policy determine whether the PDF opens in a tab or downloads; the widget does not call `window.open`.
+
+Recommended widget setup: **Auto Export On Load = Yes**, **Auto Export Delay (ms) = 1000**, **Open Generated File After Export = Yes**, **Show Export Button = Yes**, **Current View Export Action = ACT_CurrentViewToPdf**, and **Open Generated File Action = ACT_OpenGeneratedPdf**. The visible button remains a manual re-export fallback and each click uses a new key. When Open Generated File After Export is off, the second action never runs. Replace the MPK, Synchronize App Directory, and Clean Deployment Directory before the real Mendix smoke test.
+
+Mendix 10.24 `ActionValue.execute()` returns `void`; the widget observes `isExecuting` transition from running to stopped before starting the second action. This lifecycle does not expose a success/failure result. A failed generation action that entered execution can therefore still lead to the second lookup; the lookup must handle a missing key without downloading anything. The widget never retries generation automatically.
+
 ---
 
 # Build

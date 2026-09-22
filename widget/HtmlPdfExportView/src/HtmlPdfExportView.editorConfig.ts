@@ -34,5 +34,9 @@ export function check(values: HtmlPdfExportViewPreviewProps): Problem[] {
         problems.push({ property: values.exportFormat === "word" ? "onWordExport" : "onExport", severity: "error",
             message: "Configure the Current View export action before enabling Auto Export On Load." });
     }
+    if (values.openGeneratedFileAfterExport && values.exportFormat === "pdf" && values.exportScope === "currentView") {
+        if (!values.onExport) problems.push({ property: "onExport", severity: "error", message: "Current View Export Action is required for two-stage PDF delivery." });
+        if (!values.onAfterExport) problems.push({ property: "onAfterExport", severity: "error", message: "Open Generated File Action is required when Open Generated File After Export is enabled." });
+    }
     return problems;
 }

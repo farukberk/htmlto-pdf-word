@@ -30,12 +30,14 @@ export interface HtmlPdfExportViewContainerProps {
     showExportButton: boolean;
     autoExportOnLoad: boolean;
     autoExportDelayMs: number;
+    openGeneratedFileAfterExport: boolean;
+    onAfterExport?: ActionValue<{ ExportKey: Option<string> }>;
     buttonCaption: string;
     showRuntimeAppearanceSelector: boolean;
     showRuntimeScopeSelector: boolean;
     showRuntimeOrientationSelector: boolean;
     showRuntimeFormatSelector: boolean;
-    onExport?: ActionValue<{ HtmlContent: Option<string> }>;
+    onExport?: ActionValue<{ HtmlContent: Option<string>; ExportKey: Option<string> }>;
     onWordExport?: ActionValue<{ HtmlContent: Option<string>; Orientation: Option<string> }>;
     fullDataJson?: DynamicValue<string>;
     fullDataTemplate?: DynamicValue<string>;
@@ -81,6 +83,8 @@ export interface HtmlPdfExportViewPreviewProps {
     showExportButton: boolean;
     autoExportOnLoad: boolean;
     autoExportDelayMs: number | null;
+    openGeneratedFileAfterExport: boolean;
+    onAfterExport: {} | null;
     buttonCaption: string;
     showRuntimeAppearanceSelector: boolean;
     showRuntimeScopeSelector: boolean;

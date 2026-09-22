@@ -29,7 +29,8 @@ describe("Studio Pro property help", () => {
             "FullData Export Action", "Report JSON", "Template Content",
             "Batch Mode", "Batch Size", "Batch Collection Path", "Debug Mode"
             , "Export Format", "Show Runtime Format Selector", "Current View Word Export Action", "FullData Word Export Action",
-            "Show Export Button", "Auto Export On Load", "Auto Export Delay (ms)"
+            "Show Export Button", "Auto Export On Load", "Auto Export Delay (ms)",
+            "Open Generated File After Export", "Open Generated File Action"
         ]));
     });
 
@@ -48,7 +49,16 @@ describe("Studio Pro property help", () => {
         expect(defaultOf("showExportButton")).toBe("true");
         expect(defaultOf("autoExportOnLoad")).toBe("false");
         expect(defaultOf("autoExportDelayMs")).toBe("500");
+        expect(defaultOf("openGeneratedFileAfterExport")).toBe("false");
         expect(defaultOf("batchMode")).toBe("auto");
         expect(defaultOf("batchSize")).toBe("5000");
+    });
+
+    it("declares matching two-stage String action variables", () => {
+        const xml = new DOMParser().parseFromString(widgetXml, "application/xml");
+        const variables = (key: string) => Array.from(xml.querySelectorAll(`property[key='${key}'] actionVariable`))
+            .map(node => [node.getAttribute("key"), node.getAttribute("type")]);
+        expect(variables("onExport")).toEqual([["HtmlContent", "String"], ["ExportKey", "String"]]);
+        expect(variables("onAfterExport")).toEqual([["ExportKey", "String"]]);
     });
 });

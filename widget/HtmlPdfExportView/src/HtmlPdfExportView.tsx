@@ -5,6 +5,7 @@ import { buildHtmlDocument } from "./capture/buildHtmlDocument";
 import { measureSourceGeometry } from "./capture/measureSourceGeometry";
 import { normalizeWordSemantics } from "./capture/normalizeWordSemantics";
 import { executeFullDataExport } from "./export/exportScope";
+import { createExportKey } from "./export/exportKey";
 import "./ui/HtmlPdfExportView.css";
 
 export function HtmlPdfExportView(props: HtmlPdfExportViewContainerProps): ReactElement {
@@ -19,8 +20,13 @@ export function HtmlPdfExportView(props: HtmlPdfExportViewContainerProps): React
     const clickGuard = useRef(false);
     const autoExportTriggeredRef = useRef(false);
     const exportContentRef = useRef<(trigger?: "manual" | "auto") => void>(() => undefined);
-    const activeAction = useRef<"currentView" | "fullData" | "currentViewWord" | "fullDataWord">();
+    const activeAction = useRef<"currentView" | "fullData" | "currentViewWord" | "fullDataWord" | "postExport">();
     const observedExecuting = useRef(false);
+    const pendingPostExport = useRef<{ key: string; stage: "waitingStart" | "waitingFinish" | "scheduled" | "running" }>();
+    const startTimer = useRef<number>();
+    const postTimer = useRef<number>();
+    const postActionRef = useRef(props.onAfterExport);
+    postActionRef.current = props.onAfterExport;
     const appearance = props.showRuntimeAppearanceSelector ? runtimeAppearance : props.appearanceMode;
     const scope = props.showRuntimeScopeSelector ? runtimeScope : props.exportScope;
     const orientation = props.showRuntimeOrientationSelector ? runtimeOrientation : props.pdfOrientation;
@@ -31,11 +37,52 @@ export function HtmlPdfExportView(props: HtmlPdfExportViewContainerProps): React
 
     useEffect(() => {
         if (!busy || !activeAction.current) return;
+        const pending = pendingPostExport.current;
+        if (activeAction.current === "currentView" && pending) {
+            const isExecuting = Boolean(props.onExport?.isExecuting);
+            if (pending.stage === "waitingStart" && isExecuting) {
+                pending.stage = "waitingFinish";
+                if (startTimer.current !== undefined) window.clearTimeout(startTimer.current);
+            } else if (pending.stage === "waitingFinish" && !isExecuting) {
+                pending.stage = "scheduled";
+                postTimer.current = window.setTimeout(() => {
+                    if (pendingPostExport.current !== pending || pending.stage !== "scheduled") return;
+                    const postAction = postActionRef.current;
+                    if (!postAction || !postAction.canExecute || postAction.isExecuting) {
+                        setExportError("Open Generated File Action is not ready. The PDF may already be stored.");
+                        finishExport();
+                        return;
+                    }
+                    pending.stage = "running";
+                    activeAction.current = "postExport";
+                    observedExecuting.current = false;
+                    try {
+                        postAction.execute({ ExportKey: pending.key });
+                        startTimer.current = window.setTimeout(() => {
+                            if (pendingPostExport.current !== pending || observedExecuting.current) return;
+                            setExportError("Open Generated File Action did not start. The PDF may already be stored.");
+                            finishExport();
+                        }, 30_000);
+                    }
+                    catch (error) {
+                        setExportError("Open Generated File Action failed. The PDF may already be stored.");
+                        if (props.debugMode) console.error("HtmlPdfExportView post-export action failed", error);
+                        finishExport();
+                    }
+                }, 0);
+            }
+            return;
+        }
         const isExecuting = activeAction.current === "fullData" ? Boolean(props.onFullDataExport?.isExecuting)
             : activeAction.current === "fullDataWord" ? Boolean(props.onFullDataWordExport?.isExecuting)
             : activeAction.current === "currentViewWord" ? Boolean(props.onWordExport?.isExecuting)
+            : activeAction.current === "postExport" ? Boolean(props.onAfterExport?.isExecuting)
             : Boolean(props.onExport?.isExecuting);
         if (isExecuting) observedExecuting.current = true;
+        if (activeAction.current === "postExport") {
+            if (observedExecuting.current && !isExecuting) finishExport();
+            return;
+        }
         if (observedExecuting.current && !isExecuting) finishExport();
         const fallback = window.setTimeout(() => {
             if (!observedExecuting.current) finishExport();
@@ -44,16 +91,27 @@ export function HtmlPdfExportView(props: HtmlPdfExportViewContainerProps): React
     });
 
     function finishExport(): void {
+        if (startTimer.current !== undefined) window.clearTimeout(startTimer.current);
+        if (postTimer.current !== undefined) window.clearTimeout(postTimer.current);
+        startTimer.current = undefined;
+        postTimer.current = undefined;
+        pendingPostExport.current = undefined;
         clickGuard.current = false;
         activeAction.current = undefined;
         observedExecuting.current = false;
         setBusy(false);
     }
 
+    useEffect(() => () => {
+        if (startTimer.current !== undefined) window.clearTimeout(startTimer.current);
+        if (postTimer.current !== undefined) window.clearTimeout(postTimer.current);
+    }, []);
+
     const exportContent = useCallback((trigger: "manual" | "auto" = "manual") => {
         if (clickGuard.current) return;
         clickGuard.current = true;
         if (trigger === "manual" && props.autoExportOnLoad) autoExportTriggeredRef.current = true;
+        const exportKey = createExportKey();
         setBusy(true);
         setExportError(undefined);
         if (scope !== "currentView") {
@@ -99,6 +157,9 @@ export function HtmlPdfExportView(props: HtmlPdfExportViewContainerProps): React
             if (trigger === "auto" && !action) throw new Error("Configure the Current View export action before enabling Auto Export On Load.");
             if (action && (!action.canExecute || action.isExecuting)) throw new Error("The Current View export action is not ready.");
             if (format === "word" && !action) throw new Error("The Current View Word export action is not configured.");
+            if (format === "pdf" && props.openGeneratedFileAfterExport && (!props.onExport || !props.onAfterExport)) {
+                throw new Error("Configure both Current View Export Action and Open Generated File Action for two-stage PDF export.");
+            }
 
             const geometry = measureSourceGeometry(rootRef.current);
             const clone = cloneExportRoot(rootRef.current, { includeImages: props.includeImages, appearanceMode: format === "word" ? "cleanReport" : appearance });
@@ -132,8 +193,16 @@ export function HtmlPdfExportView(props: HtmlPdfExportViewContainerProps): React
                 props.onWordExport.execute({ HtmlContent: html, Orientation: orientation });
                 activeAction.current = "currentViewWord";
             } else if (format === "pdf" && props.onExport) {
-                props.onExport.execute({ HtmlContent: html });
+                if (props.openGeneratedFileAfterExport) pendingPostExport.current = { key: exportKey, stage: "waitingStart" };
+                props.onExport.execute({ HtmlContent: html, ExportKey: exportKey });
                 activeAction.current = "currentView";
+                if (props.openGeneratedFileAfterExport) {
+                    startTimer.current = window.setTimeout(() => {
+                        if (pendingPostExport.current?.key !== exportKey || pendingPostExport.current.stage !== "waitingStart") return;
+                        setExportError("Current View export action did not start. No file-open action was run.");
+                        finishExport();
+                    }, 30_000);
+                }
             } else {
                 const url = URL.createObjectURL(new Blob([html], { type: "text/html;charset=utf-8" }));
                 const link = document.createElement("a");
@@ -145,7 +214,7 @@ export function HtmlPdfExportView(props: HtmlPdfExportViewContainerProps): React
             }
         } catch (error) {
             const technicalMessage = error instanceof Error ? error.message : "Current View export failed.";
-            setExportError(/Current View export action|export content/i.test(technicalMessage) ? technicalMessage : userMessage(technicalMessage));
+            setExportError(/Current View export action|Open Generated File Action|export content/i.test(technicalMessage) ? technicalMessage : userMessage(technicalMessage));
             if (props.debugMode) console.error("HtmlPdfExportView Current View export failed", { format, message: technicalMessage });
             finishExport();
         }
