@@ -64,7 +64,7 @@ describe("two-stage Current View PDF export", () => {
         expect(URL.createObjectURL).not.toHaveBeenCalled();
     });
 
-    it("uses the same pipeline for auto export while leaving the manual button visible", () => {
+    it("uses the same pipeline for auto export while leaving the manual button visible", async () => {
         const generate = vi.fn(), open = vi.fn();
         const base = props({ autoExportOnLoad: true, autoExportDelayMs: 1000,
             onExport: { canExecute: true, isExecuting: false, execute: generate },
@@ -74,6 +74,7 @@ describe("two-stage Current View PDF export", () => {
         act(() => vi.advanceTimersByTime(1015));
         expect(generate).not.toHaveBeenCalled();
         act(() => vi.advanceTimersByTime(1));
+        await act(async () => { await vi.advanceTimersByTimeAsync(100); });
         expect(generate).toHaveBeenCalledTimes(1);
         view.rerender(<StrictMode><HtmlPdfExportView {...props({ ...base, onExport: { ...base.onExport, isExecuting: true } })} /></StrictMode>);
         view.rerender(<StrictMode><HtmlPdfExportView {...base} /></StrictMode>);

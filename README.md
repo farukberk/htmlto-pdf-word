@@ -1361,6 +1361,12 @@ Recommended widget setup: **Auto Export On Load = Yes**, **Auto Export Delay (ms
 
 Mendix 10.24 `ActionValue.execute()` returns `void`; the widget observes `isExecuting` transition from running to stopped before starting the second action. This lifecycle does not expose a success/failure result. A failed generation action that entered execution can therefore still lead to the second lookup; the lookup must handle a missing key without downloading anything. The widget never retries generation automatically.
 
+### Current View Exact View geometry fidelity
+
+Exact View now takes a source geometry snapshot before detaching the export clone. The clone retains the source desktop width and the source grid/flex layout. Only evidence-backed browser-shell constraints are relaxed in the clone: viewport-filling heights, oversized flex wrappers, and report scroll containers whose rendered content exceeds their visible box. Fixed-height business components are not globally resized, and the live Mendix DOM is never modified. Meaningful visible content bounds drive source-height measurement instead of viewport filler. Application `@media print` rules are excluded from Exact View so they cannot hide screen-visible report values; PDF page size and orientation remain controlled by the renderer.
+
+After Auto Export Delay, capture also waits for fonts and visible images where available, takes at least two animation-frame samples, and briefly waits for width/content/text metrics to stabilize (at most about 1.5 seconds of additional capture preparation). Auto orientation uses the measured desktop width and meaningful report height; wide reports can select Landscape before proportional paper fitting. Debug Mode reports only counts and dimensions—including visible text before/after normalization, clipping, expanded containers, selected orientation, and scale—not business text or form values. A local generic nested-report fixture exercises value retention, natural section flow, scroll/flex cleanup, and fixed-height safety; the real corporate PDF still needs side-by-side validation.
+
 ---
 
 # Build

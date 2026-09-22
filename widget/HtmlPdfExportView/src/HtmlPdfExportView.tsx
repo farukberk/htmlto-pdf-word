@@ -2,10 +2,12 @@ import { createElement, ReactElement, useCallback, useEffect, useRef, useState }
 import { HtmlPdfExportViewContainerProps } from "../typings/HtmlPdfExportViewProps";
 import { cloneExportRoot } from "./capture/cloneExportRoot";
 import { buildHtmlDocument } from "./capture/buildHtmlDocument";
-import { measureSourceGeometry } from "./capture/measureSourceGeometry";
+import { chooseAutoOrientation, measureSourceGeometry } from "./capture/measureSourceGeometry";
 import { normalizeWordSemantics } from "./capture/normalizeWordSemantics";
 import { executeFullDataExport } from "./export/exportScope";
 import { createExportKey } from "./export/exportKey";
+import { GeometryDiagnostics } from "./capture/exactViewGeometry";
+import { waitForCaptureStability } from "./capture/waitForCaptureStability";
 import "./ui/HtmlPdfExportView.css";
 
 export function HtmlPdfExportView(props: HtmlPdfExportViewContainerProps): ReactElement {
@@ -107,13 +109,18 @@ export function HtmlPdfExportView(props: HtmlPdfExportViewContainerProps): React
         if (postTimer.current !== undefined) window.clearTimeout(postTimer.current);
     }, []);
 
-    const exportContent = useCallback((trigger: "manual" | "auto" = "manual") => {
+    const exportContent = useCallback(async (trigger: "manual" | "auto" = "manual") => {
         if (clickGuard.current) return;
         clickGuard.current = true;
         if (trigger === "manual" && props.autoExportOnLoad) autoExportTriggeredRef.current = true;
         const exportKey = createExportKey();
         setBusy(true);
         setExportError(undefined);
+        if (trigger === "auto" && scope === "currentView" && rootRef.current) {
+            const stability = await waitForCaptureStability(rootRef.current);
+            if (props.debugMode) console.info("HtmlPdfExportView capture stability", stability);
+            if (!rootRef.current) { finishExport(); return; }
+        }
         if (scope !== "currentView") {
             try {
                 if (format === "word") {
@@ -162,9 +169,19 @@ export function HtmlPdfExportView(props: HtmlPdfExportViewContainerProps): React
             }
 
             const geometry = measureSourceGeometry(rootRef.current);
-            const clone = cloneExportRoot(rootRef.current, { includeImages: props.includeImages, appearanceMode: format === "word" ? "cleanReport" : appearance });
+            let geometryDiagnostics: GeometryDiagnostics | undefined;
+            const clone = cloneExportRoot(rootRef.current, { includeImages: props.includeImages,
+                appearanceMode: format === "word" ? "cleanReport" : appearance,
+                onGeometryDiagnostics: diagnostics => { geometryDiagnostics = diagnostics; } });
+            if (format === "pdf" && appearance === "exactView" && geometryDiagnostics &&
+                (geometryDiagnostics.visibleTextElementsAfter < geometryDiagnostics.visibleTextElementsBefore ||
+                 geometryDiagnostics.visibleCharactersAfter < geometryDiagnostics.visibleCharactersBefore ||
+                 geometryDiagnostics.runtimeValueCountAfter < geometryDiagnostics.runtimeValueCountBefore)) {
+                throw new Error("Exact View capture lost visible report content before PDF generation.");
+            }
             if (format === "word") normalizeWordSemantics(clone);
-            const html = buildHtmlDocument(clone, { includeStyles: props.includeStyles }, {
+            const html = buildHtmlDocument(clone, { includeStyles: props.includeStyles,
+                appearanceMode: format === "word" ? "cleanReport" : appearance }, {
                 sourceWidth: geometry.width,
                 sourceHeight: geometry.height,
                 orientation
@@ -174,17 +191,36 @@ export function HtmlPdfExportView(props: HtmlPdfExportViewContainerProps): React
                 const landscapeWidth = (297 - 16) * 96 / 25.4;
                 const portraitScale = Math.min(1, portraitWidth / geometry.width);
                 const landscapeScale = Math.min(1, landscapeWidth / geometry.width);
-                const selectedOrientation = orientation === "auto" && landscapeScale >= portraitScale * 1.15 ? "landscape" : orientation === "auto" ? "portrait" : orientation;
+                const selectedOrientation = orientation === "auto"
+                    ? chooseAutoOrientation(geometry.width, geometry.height, portraitWidth, landscapeWidth) : orientation;
                 console.info("HtmlPdfExportView captured", {
                     bytes: new Blob([html]).size,
                     appearanceMode: appearance,
                     exportScope: scope,
                     sourceWidth: geometry.width,
                     sourceHeight: geometry.height,
+                    captureRootClientWidth: geometryDiagnostics?.captureRootClientWidth,
+                    captureRootClientHeight: geometryDiagnostics?.captureRootClientHeight,
+                    captureRootScrollWidth: geometryDiagnostics?.captureRootScrollWidth,
+                    captureRootScrollHeight: geometryDiagnostics?.captureRootScrollHeight,
+                    meaningfulContentWidth: geometryDiagnostics?.meaningfulContentWidth,
+                    meaningfulContentHeight: geometryDiagnostics?.meaningfulContentHeight,
+                    visibleTextElementsBefore: geometryDiagnostics?.visibleTextElementsBefore,
+                    visibleTextElementsAfter: geometryDiagnostics?.visibleTextElementsAfter,
+                    visibleCharactersBefore: geometryDiagnostics?.visibleCharactersBefore,
+                    visibleCharactersAfter: geometryDiagnostics?.visibleCharactersAfter,
+                    runtimeValueCountBefore: geometryDiagnostics?.runtimeValueCountBefore,
+                    runtimeValueCountAfter: geometryDiagnostics?.runtimeValueCountAfter,
+                    clippedTextElementCount: geometryDiagnostics?.clippedTextElementCount,
+                    elementsOutsideParentBounds: geometryDiagnostics?.elementsOutsideParentBounds,
+                    collapsedParentCount: geometryDiagnostics?.collapsedParentCount,
+                    overflowContainersExpanded: geometryDiagnostics?.overflowContainersExpanded,
+                    viewportContainersNormalized: geometryDiagnostics?.viewportContainersNormalized,
                     selectedOrientation,
                     portraitScale,
                     landscapeScale,
                     chosenScale: selectedOrientation === "landscape" ? landscapeScale : portraitScale,
+                    finalScale: selectedOrientation === "landscape" ? landscapeScale : portraitScale,
                     chromiumViewportWidth: geometry.width,
                     printablePageWidth: selectedOrientation === "landscape" ? landscapeWidth : portraitWidth
                 });

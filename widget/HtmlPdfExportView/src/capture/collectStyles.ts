@@ -1,14 +1,22 @@
-export function collectStyles(doc: Document = document): string {
+export function collectStyles(doc: Document = document, excludeApplicationPrintRules = false): string {
     const css: string[] = [];
     for (const sheet of Array.from(doc.styleSheets)) {
         try {
             const baseUri = sheet.href || doc.baseURI;
-            css.push(Array.from(sheet.cssRules).map(rule => absolutizeCssUrls(rule.cssText, baseUri)).join("\n"));
+            css.push(Array.from(sheet.cssRules)
+                .filter(rule => !excludeApplicationPrintRules || !isPrintMediaRule(rule))
+                .map(rule => absolutizeCssUrls(rule.cssText, baseUri)).join("\n"));
         } catch (error) {
             if (!(error instanceof DOMException) || error.name !== "SecurityError") continue;
         }
     }
     return css.join("\n");
+}
+
+function isPrintMediaRule(rule: CSSRule): boolean {
+    if (rule.type !== CSSRule.MEDIA_RULE) return false;
+    const mediaText = (rule as CSSMediaRule).media.mediaText.toLowerCase();
+    return /(?:^|[,\s])print(?:$|[,\s])/.test(mediaText);
 }
 
 function absolutizeCssUrls(cssText: string, baseUri: string): string {

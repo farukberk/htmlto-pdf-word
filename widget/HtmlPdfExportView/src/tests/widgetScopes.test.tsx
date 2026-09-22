@@ -202,7 +202,7 @@ describe("HtmlPdfExportView scope integration", () => {
         expect(URL.createObjectURL).not.toHaveBeenCalled();
     });
 
-    it("honors the paint and configurable delay, fires once, and does not download HTML", () => {
+    it("honors the paint and configurable delay, fires once, and does not download HTML", async () => {
         useAutoTimers();
         const execute = vi.fn();
         const props = baseProps({ autoExportOnLoad: true, autoExportDelayMs: 500,
@@ -211,6 +211,7 @@ describe("HtmlPdfExportView scope integration", () => {
         act(() => vi.advanceTimersByTime(515));
         expect(execute).not.toHaveBeenCalled();
         act(() => vi.advanceTimersByTime(1));
+        await flushStability();
         expect(execute).toHaveBeenCalledTimes(1);
         expect(execute.mock.calls[0][0].HtmlContent).toContain("<!doctype html>");
         expect(execute.mock.calls[0][0].HtmlContent).toContain("Visible report");
@@ -220,7 +221,7 @@ describe("HtmlPdfExportView scope integration", () => {
         expect(execute).toHaveBeenCalledTimes(1);
     });
 
-    it("hides only the export button while auto export still runs", () => {
+    it("hides only the export button while auto export still runs", async () => {
         useAutoTimers();
         const execute = vi.fn();
         render(<HtmlPdfExportView {...baseProps({ autoExportOnLoad: true, autoExportDelayMs: 0,
@@ -228,10 +229,11 @@ describe("HtmlPdfExportView scope integration", () => {
         expect(screen.queryByRole("button", { name: "Export" })).toBeNull();
         expect(screen.getByTestId("content").textContent).toBe("Visible report");
         act(() => vi.advanceTimersByTime(17));
+        await flushStability();
         expect(execute).toHaveBeenCalledTimes(1);
     });
 
-    it("waits for a temporarily unavailable action without retry polling", () => {
+    it("waits for a temporarily unavailable action without retry polling", async () => {
         useAutoTimers();
         const execute = vi.fn();
         const action = { canExecute: false, isExecuting: false, execute };
@@ -240,6 +242,7 @@ describe("HtmlPdfExportView scope integration", () => {
         expect(execute).not.toHaveBeenCalled();
         view.rerender(<HtmlPdfExportView {...baseProps({ autoExportOnLoad: true, autoExportDelayMs: 0,
             onExport: { ...action, canExecute: true } })} />);
+        await flushStability();
         expect(execute).toHaveBeenCalledTimes(1);
         act(() => vi.advanceTimersByTime(2_000));
         expect(execute).toHaveBeenCalledTimes(1);
@@ -259,17 +262,19 @@ describe("HtmlPdfExportView scope integration", () => {
         expect(URL.createObjectURL).toHaveBeenCalledTimes(1);
     });
 
-    it("does not double export under repeated effects, but allows a fresh mount", () => {
+    it("does not double export under repeated effects, but allows a fresh mount", async () => {
         useAutoTimers();
         const execute = vi.fn();
         const props = baseProps({ autoExportOnLoad: true, autoExportDelayMs: 0,
             onExport: { canExecute: true, isExecuting: false, execute } });
         const view = render(<StrictMode><HtmlPdfExportView {...props} /></StrictMode>);
         act(() => vi.advanceTimersByTime(17));
+        await flushStability();
         expect(execute).toHaveBeenCalledTimes(1);
         view.unmount();
         render(<HtmlPdfExportView {...props} />);
         act(() => vi.advanceTimersByTime(17));
+        await flushStability();
         expect(execute).toHaveBeenCalledTimes(2);
     });
 
@@ -291,4 +296,8 @@ function useAutoTimers(): void {
         value: (callback: FrameRequestCallback) => window.setTimeout(() => callback(0), 16) });
     Object.defineProperty(window, "cancelAnimationFrame", { configurable: true,
         value: (id: number) => window.clearTimeout(id) });
+}
+
+async function flushStability(): Promise<void> {
+    await act(async () => { await vi.advanceTimersByTimeAsync(100); });
 }

@@ -1,12 +1,19 @@
 import { serializeCanvas } from "./serializeCanvas";
 import { synchronizeFormState } from "./synchronizeFormState";
 import { cleanExportDom, ExportAppearanceMode } from "./cleanExportDom";
+import { captureGeometrySnapshot, GeometryDiagnostics, normalizeExactViewGeometry } from "./exactViewGeometry";
 
-export interface CloneOptions { includeImages: boolean; appearanceMode?: ExportAppearanceMode; }
+export interface CloneOptions { includeImages: boolean; appearanceMode?: ExportAppearanceMode;
+    onGeometryDiagnostics?: (diagnostics: GeometryDiagnostics) => void; }
 
 export function cloneExportRoot(root: HTMLElement, options: CloneOptions): HTMLElement {
+    const snapshot = (options.appearanceMode ?? "exactView") === "exactView" ? captureGeometrySnapshot(root) : undefined;
     const clone = root.cloneNode(true) as HTMLElement;
     synchronizeFormState(root, clone);
+    if (snapshot) {
+        const diagnostics = normalizeExactViewGeometry(root, clone, snapshot);
+        options.onGeometryDiagnostics?.(diagnostics);
+    }
     if (options.includeImages) {
         normalizeImageResources(root, clone);
         serializeCanvas(root, clone);

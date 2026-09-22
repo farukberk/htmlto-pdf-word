@@ -8,7 +8,7 @@ tr { break-inside: avoid; page-break-inside: avoid; }
 table { border-collapse: collapse; max-width: 100%; }
 img, svg { max-width: 100%; }`;
 
-export interface HtmlDocumentOptions { includeStyles: boolean; title?: string; }
+export interface HtmlDocumentOptions { includeStyles: boolean; title?: string; appearanceMode?: "exactView" | "cleanReport"; }
 
 export interface ExportMetadata {
     sourceWidth: number;
@@ -17,7 +17,7 @@ export interface ExportMetadata {
 }
 
 export function buildHtmlDocument(root: Element, options: HtmlDocumentOptions, metadata?: ExportMetadata): string {
-    const styles = options.includeStyles ? collectStyles() : "";
+    const styles = options.includeStyles ? collectStyles(document, options.appearanceMode === "exactView") : "";
     const title = escapeHtml(options.title ?? document.title ?? "Export");
     const attributes = metadata
         ? ` data-html-pdf-source-width="${metadata.sourceWidth}" data-html-pdf-source-height="${metadata.sourceHeight}" data-html-pdf-orientation="${metadata.orientation}"`
