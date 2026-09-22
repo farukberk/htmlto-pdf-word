@@ -8,6 +8,7 @@ import { executeFullDataExport } from "./export/exportScope";
 import { createExportKey } from "./export/exportKey";
 import { GeometryDiagnostics } from "./capture/exactViewGeometry";
 import { waitForCaptureStability } from "./capture/waitForCaptureStability";
+import { PdfVisualPolishOptions, PdfVisualPolishResult } from "./capture/pdfVisualPolish";
 import "./ui/HtmlPdfExportView.css";
 
 export function HtmlPdfExportView(props: HtmlPdfExportViewContainerProps): ReactElement {
@@ -170,8 +171,16 @@ export function HtmlPdfExportView(props: HtmlPdfExportViewContainerProps): React
 
             const geometry = measureSourceGeometry(rootRef.current);
             let geometryDiagnostics: GeometryDiagnostics | undefined;
+            let polishResult: PdfVisualPolishResult | undefined;
+            const pdfVisualPolish: PdfVisualPolishOptions | undefined = format === "pdf" ? {
+                hideScrollbarsInExport: props.hideScrollbarsInExport !== false,
+                expandRenderedScrollContent: props.expandRenderedScrollContent !== false,
+                trimViewportWhitespace: props.trimViewportWhitespace !== false
+            } : undefined;
             const clone = cloneExportRoot(rootRef.current, { includeImages: props.includeImages,
                 appearanceMode: format === "word" ? "cleanReport" : appearance,
+                pdfVisualPolish,
+                onVisualPolish: result => { polishResult = result; },
                 onGeometryDiagnostics: diagnostics => { geometryDiagnostics = diagnostics; } });
             if (format === "pdf" && appearance === "exactView" && geometryDiagnostics &&
                 (geometryDiagnostics.visibleTextElementsAfter < geometryDiagnostics.visibleTextElementsBefore ||
@@ -181,7 +190,7 @@ export function HtmlPdfExportView(props: HtmlPdfExportViewContainerProps): React
             }
             if (format === "word") normalizeWordSemantics(clone);
             const html = buildHtmlDocument(clone, { includeStyles: props.includeStyles,
-                appearanceMode: format === "word" ? "cleanReport" : appearance }, {
+                appearanceMode: format === "word" ? "cleanReport" : appearance, pdfVisualPolish }, {
                 sourceWidth: geometry.width,
                 sourceHeight: geometry.height,
                 orientation
@@ -216,6 +225,11 @@ export function HtmlPdfExportView(props: HtmlPdfExportViewContainerProps): React
                     collapsedParentCount: geometryDiagnostics?.collapsedParentCount,
                     overflowContainersExpanded: geometryDiagnostics?.overflowContainersExpanded,
                     viewportContainersNormalized: geometryDiagnostics?.viewportContainersNormalized,
+                    scrollContainersFound: geometryDiagnostics?.scrollContainersFound,
+                    unsafeScrollContainers: geometryDiagnostics?.unsafeScrollContainers,
+                    scrollbarsHidden: polishResult?.scrollbarsHidden,
+                    resizeGripsRemoved: polishResult?.resizeGripsRemoved,
+                    trimmedTrailingWhitespace: geometryDiagnostics?.trimmedTrailingWhitespace,
                     selectedOrientation,
                     portraitScale,
                     landscapeScale,

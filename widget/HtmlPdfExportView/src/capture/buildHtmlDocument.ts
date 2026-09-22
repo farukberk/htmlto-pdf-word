@@ -1,4 +1,5 @@
 import { collectStyles } from "./collectStyles";
+import { pdfVisualPolishCss, PdfVisualPolishOptions } from "./pdfVisualPolish";
 
 const PRINT_CSS = `@page { size: auto; margin: 12mm; }
 thead { display: table-header-group; }
@@ -8,7 +9,8 @@ tr { break-inside: avoid; page-break-inside: avoid; }
 table { border-collapse: collapse; max-width: 100%; }
 img, svg { max-width: 100%; }`;
 
-export interface HtmlDocumentOptions { includeStyles: boolean; title?: string; appearanceMode?: "exactView" | "cleanReport"; }
+export interface HtmlDocumentOptions { includeStyles: boolean; title?: string; appearanceMode?: "exactView" | "cleanReport";
+    pdfVisualPolish?: PdfVisualPolishOptions; }
 
 export interface ExportMetadata {
     sourceWidth: number;
@@ -22,7 +24,8 @@ export function buildHtmlDocument(root: Element, options: HtmlDocumentOptions, m
     const attributes = metadata
         ? ` data-html-pdf-source-width="${metadata.sourceWidth}" data-html-pdf-source-height="${metadata.sourceHeight}" data-html-pdf-orientation="${metadata.orientation}"`
         : "";
-    return `<!doctype html>\n<html lang="tr"${attributes}><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${title}</title><style>${styles}\n${PRINT_CSS}</style></head><body>${root.outerHTML}</body></html>`;
+    const polish = options.pdfVisualPolish ? pdfVisualPolishCss(options.pdfVisualPolish) : "";
+    return `<!doctype html>\n<html lang="tr"${attributes}><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${title}</title><style>${styles}\n${PRINT_CSS}\n${polish}</style></head><body>${root.outerHTML}</body></html>`;
 }
 
 function escapeHtml(value: string): string {

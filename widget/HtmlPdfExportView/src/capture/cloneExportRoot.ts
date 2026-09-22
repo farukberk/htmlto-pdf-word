@@ -2,16 +2,20 @@ import { serializeCanvas } from "./serializeCanvas";
 import { synchronizeFormState } from "./synchronizeFormState";
 import { cleanExportDom, ExportAppearanceMode } from "./cleanExportDom";
 import { captureGeometrySnapshot, GeometryDiagnostics, normalizeExactViewGeometry } from "./exactViewGeometry";
+import { applyPdfVisualPolish, PdfVisualPolishOptions, PdfVisualPolishResult } from "./pdfVisualPolish";
 
 export interface CloneOptions { includeImages: boolean; appearanceMode?: ExportAppearanceMode;
-    onGeometryDiagnostics?: (diagnostics: GeometryDiagnostics) => void; }
+    onGeometryDiagnostics?: (diagnostics: GeometryDiagnostics) => void;
+    pdfVisualPolish?: PdfVisualPolishOptions;
+    onVisualPolish?: (result: PdfVisualPolishResult) => void; }
 
 export function cloneExportRoot(root: HTMLElement, options: CloneOptions): HTMLElement {
-    const snapshot = (options.appearanceMode ?? "exactView") === "exactView" ? captureGeometrySnapshot(root) : undefined;
+    const snapshot = ((options.appearanceMode ?? "exactView") === "exactView" || options.pdfVisualPolish)
+        ? captureGeometrySnapshot(root) : undefined;
     const clone = root.cloneNode(true) as HTMLElement;
     synchronizeFormState(root, clone);
     if (snapshot) {
-        const diagnostics = normalizeExactViewGeometry(root, clone, snapshot);
+        const diagnostics = normalizeExactViewGeometry(root, clone, snapshot, options.pdfVisualPolish);
         options.onGeometryDiagnostics?.(diagnostics);
     }
     if (options.includeImages) {
@@ -20,6 +24,11 @@ export function cloneExportRoot(root: HTMLElement, options: CloneOptions): HTMLE
     }
     else clone.querySelectorAll("img,canvas").forEach(element => element.remove());
     cleanExportDom(clone, options.appearanceMode ?? "exactView");
+    if (options.pdfVisualPolish) {
+        const result = applyPdfVisualPolish(clone, options.pdfVisualPolish);
+        options.onVisualPolish?.(result);
+    }
+    else if (options.onVisualPolish) options.onVisualPolish({ scrollbarsHidden: false, resizeGripsRemoved: 0 });
     return clone;
 }
 

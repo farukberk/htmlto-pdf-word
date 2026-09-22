@@ -1367,6 +1367,12 @@ Exact View now takes a source geometry snapshot before detaching the export clon
 
 After Auto Export Delay, capture also waits for fonts and visible images where available, takes at least two animation-frame samples, and briefly waits for width/content/text metrics to stabilize (at most about 1.5 seconds of additional capture preparation). Auto orientation uses the measured desktop width and meaningful report height; wide reports can select Landscape before proportional paper fitting. Debug Mode reports only counts and dimensions—including visible text before/after normalization, clipping, expanded containers, selected orientation, and scale—not business text or form values. A local generic nested-report fixture exercises value retention, natural section flow, scroll/flex cleanup, and fixed-height safety; the real corporate PDF still needs side-by-side validation.
 
+### PDF Visual Polish
+
+Current View PDF exports now share a clone-only presentation layer across Exact View and Clean Report. It hides document, vertical, horizontal, and nested scrollbar chrome; removes textarea resize grips and transient caret/selection artifacts; and keeps the source desktop width before proportional paper fitting. Safe scroll wrappers expand only when their content is already rendered in the DOM. Virtualized or interactive scrollers retain their geometry and merely hide scrollbar chrome. This never loads additional DataGrid2 records or changes FullData behavior.
+
+Three Studio Pro PDF settings default to **Yes**: **Hide Scrollbars in Export**, **Expand Rendered Scroll Content**, and **Trim Viewport Whitespace**. The last setting removes viewport-shell filler and trailing space based on meaningful content bounds; it does not collapse intentional margins, padding, or fixed-height business components. All changes are made to the export clone or standalone PDF HTML, never the live Mendix page. The existing application-level Auto Export Delay and two-stage ExportKey delivery remain unchanged.
+
 ---
 
 # Build

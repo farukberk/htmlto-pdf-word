@@ -22,6 +22,15 @@ export interface GeometryDiagnostics extends GeometryMetrics {
     runtimeValueCountAfter: number;
     overflowContainersExpanded: number;
     viewportContainersNormalized: number;
+    scrollContainersFound: number;
+    unsafeScrollContainers: number;
+    trimmedTrailingWhitespace: number;
+}
+
+export interface GeometryNormalizationOptions {
+    expandRenderedScrollContent: boolean;
+    trimViewportWhitespace: boolean;
+    hideScrollbarsInExport?: boolean;
 }
 
 interface Rect { left: number; top: number; right: number; bottom: number; width: number; height: number }
@@ -61,6 +70,7 @@ function visible(element: Element): boolean {
 }
 
 function directCharacters(element: Element): number {
+    if (element instanceof HTMLTextAreaElement) return element.value.trim().length;
     return Array.from(element.childNodes).reduce((count, child) =>
         count + (child.nodeType === Node.TEXT_NODE ? (child.textContent ?? "").trim().length : 0), 0);
 }
@@ -179,14 +189,28 @@ function viewportLike(source: HTMLElement, style: CSSStyleDeclaration, contentBo
         (contentBottom < height * 0.7 || contentBottom > height + 4);
 }
 
+function unsafeScrollContainer(source: HTMLElement, style: CSSStyleDeclaration): boolean {
+    if (source.matches("input,textarea,select,[contenteditable='true'],[role='slider'],[role='tablist']")) return true;
+    if (source.querySelector("canvas,[contenteditable='true']")) return true;
+    if (source.scrollTop > 0 || source.scrollLeft > 0) return true;
+    if (style.scrollSnapType && style.scrollSnapType !== "none") return true;
+    const declaredRows = Number(source.getAttribute("aria-rowcount"));
+    if (declaredRows > 0 && declaredRows > source.querySelectorAll("[role='row']").length) return true;
+    return false;
+}
+
 export function normalizeExactViewGeometry(source: HTMLElement, clone: HTMLElement,
-                                           snapshot: SourceGeometrySnapshot = captureGeometrySnapshot(source)): GeometryDiagnostics {
+                                           snapshot: SourceGeometrySnapshot = captureGeometrySnapshot(source),
+                                           options: GeometryNormalizationOptions = { expandRenderedScrollContent: true,
+                                               trimViewportWhitespace: true }): GeometryDiagnostics {
     const before = analyzeSourceGeometry(source);
     const originals = descendants(source);
     const copies = descendants(clone);
     const bottoms = contentBottoms(source, originals);
     let overflowContainersExpanded = 0;
     let viewportContainersNormalized = 0;
+    let scrollContainersFound = 0;
+    let unsafeScrollContainers = 0;
     const inflatedScrollWidth = before.meaningfulContentWidth > 0 &&
         before.captureRootScrollWidth > before.meaningfulContentWidth * 1.3 &&
         before.captureRootClientWidth <= before.meaningfulContentWidth * 1.1;
@@ -213,18 +237,40 @@ export function normalizeExactViewGeometry(source: HTMLElement, clone: HTMLEleme
         const height = snapshot.entries[index]?.bounds.height ?? rect(current).height;
         const contentBottom = bottoms.get(current) ?? 0;
         const overflowY = style.overflowY || style.overflow;
-        const overflowScrollable = /^(auto|scroll)$/.test(overflowY) &&
+        const overflowX = style.overflowX || style.overflow;
+        const scrollContainer = /^(auto|scroll)$/.test(overflowY) || /^(auto|scroll)$/.test(overflowX);
+        if (scrollContainer) scrollContainersFound++;
+        const unsafe = unsafeScrollContainer(current, style);
+        if (scrollContainer && unsafe) unsafeScrollContainers++;
+        const overflowScrollable = options.expandRenderedScrollContent && scrollContainer && !unsafe &&
             Math.max(current.scrollHeight, contentBottom) > Math.max(height, current.clientHeight) + 4;
-        const hiddenClipsContent = /^(hidden|clip)$/.test(overflowY) && contentBottom > height + 4 &&
+        const horizontalOverflow = options.expandRenderedScrollContent && scrollContainer && !unsafe &&
+            current.scrollWidth > Math.max(rect(current).width, current.clientWidth) + 4;
+        const hiddenClipsContent = options.expandRenderedScrollContent && !unsafe && /^(hidden|clip)$/.test(overflowY) &&
+            contentBottom > height + 4 &&
             (height <= 1 || current.scrollHeight > current.clientHeight + 4);
-        if (overflowScrollable || hiddenClipsContent) {
+        if (overflowScrollable || horizontalOverflow || hiddenClipsContent) {
             target.style.overflow = "visible";
             target.style.maxHeight = "none";
             target.style.height = "auto";
             target.style.minHeight = "0";
+            if (horizontalOverflow) {
+                target.style.boxSizing = "border-box";
+                target.style.width = `${Math.max(rect(current).width, current.scrollWidth)}px`;
+                target.style.maxWidth = "none";
+            }
             overflowContainersExpanded++;
         }
-        if (viewportLike(current, style, contentBottom)) {
+        if (scrollContainer && options.hideScrollbarsInExport) {
+            target.style.boxSizing = "border-box";
+            if (!horizontalOverflow && rect(current).width > 0) target.style.width = `${rect(current).width}px`;
+            const borderWidth = (Number.parseFloat(style.borderLeftWidth) || 0) + (Number.parseFloat(style.borderRightWidth) || 0);
+            const verticalGutter = Math.max(0, current.offsetWidth - current.clientWidth - borderWidth);
+            if (verticalGutter > 0 && !overflowScrollable) {
+                target.style.paddingRight = `${(Number.parseFloat(style.paddingRight) || 0) + verticalGutter}px`;
+            }
+        }
+        if (options.trimViewportWhitespace && viewportLike(current, style, contentBottom)) {
             target.style.height = "auto";
             target.style.minHeight = "0";
             target.style.maxHeight = "none";
@@ -239,7 +285,10 @@ export function normalizeExactViewGeometry(source: HTMLElement, clone: HTMLEleme
     return { ...before, visibleTextElementsBefore: before.visibleTextElements,
         visibleTextElementsAfter: after.textElements, visibleCharactersBefore: before.visibleCharacters,
         visibleCharactersAfter: after.characters, runtimeValueCountBefore: before.runtimeValueCount,
-        runtimeValueCountAfter: after.runtimeValues, overflowContainersExpanded, viewportContainersNormalized };
+        runtimeValueCountAfter: after.runtimeValues, overflowContainersExpanded, viewportContainersNormalized,
+        scrollContainersFound, unsafeScrollContainers,
+        trimmedTrailingWhitespace: viewportContainersNormalized > 0
+            ? Math.max(0, before.captureRootScrollHeight - before.meaningfulContentHeight) : 0 };
 }
 
 function countCloneContent(clone: HTMLElement, originals: HTMLElement[]): { textElements: number; characters: number; runtimeValues: number } {
