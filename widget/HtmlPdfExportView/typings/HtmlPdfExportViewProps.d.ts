@@ -27,6 +27,9 @@ export interface HtmlPdfExportViewContainerProps {
     appearanceMode: AppearanceModeEnum;
     exportScope: ExportScopeEnum;
     pdfOrientation: PdfOrientationEnum;
+    horizontalPageMarginMm: number;
+    verticalPageMarginMm: number;
+    smartPageBreaks: boolean;
     hideScrollbarsInExport: boolean;
     expandRenderedScrollContent: boolean;
     trimViewportWhitespace: boolean;
@@ -83,6 +86,9 @@ export interface HtmlPdfExportViewPreviewProps {
     appearanceMode: AppearanceModeEnum;
     exportScope: ExportScopeEnum;
     pdfOrientation: PdfOrientationEnum;
+    horizontalPageMarginMm: number | null;
+    verticalPageMarginMm: number | null;
+    smartPageBreaks: boolean;
     hideScrollbarsInExport: boolean;
     expandRenderedScrollContent: boolean;
     trimViewportWhitespace: boolean;

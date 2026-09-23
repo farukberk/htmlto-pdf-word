@@ -1,5 +1,10 @@
 # Changelog
 
+## Corporate Print Layout & Smart Pagination
+
+- Added a Portrait-first A4 print box with configurable symmetric horizontal/vertical margins and centered source-width fitting.
+- Added clone-only orphan-heading prevention, table/grid header grouping, conditional small-panel break avoidance, oversized-block safety, and optional `pdf-section`, `pdf-keep-with-next`, `pdf-avoid-break`, and `pdf-page-break-before` controls.
+
 ## Unreleased
 
 - Added shared Current View PDF Visual Polish for Exact View and Clean Report: scrollbar/resize-grip hiding, safe rendered-scroll expansion, and configurable viewport whitespace trimming (all enabled by default).

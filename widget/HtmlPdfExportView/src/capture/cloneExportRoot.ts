@@ -3,16 +3,22 @@ import { synchronizeFormState } from "./synchronizeFormState";
 import { cleanExportDom, ExportAppearanceMode } from "./cleanExportDom";
 import { captureGeometrySnapshot, GeometryDiagnostics, normalizeExactViewGeometry } from "./exactViewGeometry";
 import { applyPdfVisualPolish, PdfVisualPolishOptions, PdfVisualPolishResult } from "./pdfVisualPolish";
+import { applyCorporatePrintLayout, bindCorporateLayoutSnapshot, captureCorporateLayoutSnapshot,
+    CorporatePrintDiagnostics, CorporatePrintLayoutOptions } from "./corporatePrintLayout";
 
 export interface CloneOptions { includeImages: boolean; appearanceMode?: ExportAppearanceMode;
     onGeometryDiagnostics?: (diagnostics: GeometryDiagnostics) => void;
     pdfVisualPolish?: PdfVisualPolishOptions;
-    onVisualPolish?: (result: PdfVisualPolishResult) => void; }
+    onVisualPolish?: (result: PdfVisualPolishResult) => void;
+    corporatePrintLayout?: CorporatePrintLayoutOptions;
+    onCorporatePrintLayout?: (result: CorporatePrintDiagnostics) => void; }
 
 export function cloneExportRoot(root: HTMLElement, options: CloneOptions): HTMLElement {
+    const corporateSnapshot = options.corporatePrintLayout ? captureCorporateLayoutSnapshot(root) : undefined;
     const snapshot = ((options.appearanceMode ?? "exactView") === "exactView" || options.pdfVisualPolish)
         ? captureGeometrySnapshot(root) : undefined;
     const clone = root.cloneNode(true) as HTMLElement;
+    const boundCorporateSnapshot = corporateSnapshot ? bindCorporateLayoutSnapshot(clone, corporateSnapshot) : undefined;
     synchronizeFormState(root, clone);
     if (snapshot) {
         const diagnostics = normalizeExactViewGeometry(root, clone, snapshot, options.pdfVisualPolish);
@@ -29,6 +35,9 @@ export function cloneExportRoot(root: HTMLElement, options: CloneOptions): HTMLE
         options.onVisualPolish?.(result);
     }
     else if (options.onVisualPolish) options.onVisualPolish({ scrollbarsHidden: false, resizeGripsRemoved: 0 });
+    if (options.corporatePrintLayout && boundCorporateSnapshot) {
+        options.onCorporatePrintLayout?.(applyCorporatePrintLayout(clone, boundCorporateSnapshot, options.corporatePrintLayout));
+    }
     return clone;
 }
 

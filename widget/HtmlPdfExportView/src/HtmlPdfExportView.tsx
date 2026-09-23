@@ -2,13 +2,14 @@ import { createElement, ReactElement, useCallback, useEffect, useRef, useState }
 import { HtmlPdfExportViewContainerProps } from "../typings/HtmlPdfExportViewProps";
 import { cloneExportRoot } from "./capture/cloneExportRoot";
 import { buildHtmlDocument } from "./capture/buildHtmlDocument";
-import { chooseAutoOrientation, measureSourceGeometry } from "./capture/measureSourceGeometry";
+import { measureSourceGeometry } from "./capture/measureSourceGeometry";
 import { normalizeWordSemantics } from "./capture/normalizeWordSemantics";
 import { executeFullDataExport } from "./export/exportScope";
 import { createExportKey } from "./export/exportKey";
 import { GeometryDiagnostics } from "./capture/exactViewGeometry";
 import { waitForCaptureStability } from "./capture/waitForCaptureStability";
 import { PdfVisualPolishOptions, PdfVisualPolishResult } from "./capture/pdfVisualPolish";
+import { CorporatePrintDiagnostics, CorporatePrintLayoutOptions } from "./capture/corporatePrintLayout";
 import "./ui/HtmlPdfExportView.css";
 
 export function HtmlPdfExportView(props: HtmlPdfExportViewContainerProps): ReactElement {
@@ -172,14 +173,25 @@ export function HtmlPdfExportView(props: HtmlPdfExportViewContainerProps): React
             const geometry = measureSourceGeometry(rootRef.current);
             let geometryDiagnostics: GeometryDiagnostics | undefined;
             let polishResult: PdfVisualPolishResult | undefined;
+            let corporateResult: CorporatePrintDiagnostics | undefined;
             const pdfVisualPolish: PdfVisualPolishOptions | undefined = format === "pdf" ? {
                 hideScrollbarsInExport: props.hideScrollbarsInExport !== false,
                 expandRenderedScrollContent: props.expandRenderedScrollContent !== false,
                 trimViewportWhitespace: props.trimViewportWhitespace !== false
             } : undefined;
+            const corporatePrintLayout: CorporatePrintLayoutOptions | undefined = format === "pdf" ? {
+                orientation,
+                horizontalMarginMm: props.horizontalPageMarginMm ?? 10,
+                verticalMarginMm: props.verticalPageMarginMm ?? 12,
+                smartPageBreaks: props.smartPageBreaks !== false,
+                meaningfulSourceWidth: geometry.width,
+                meaningfulSourceHeight: geometry.height
+            } : undefined;
             const clone = cloneExportRoot(rootRef.current, { includeImages: props.includeImages,
                 appearanceMode: format === "word" ? "cleanReport" : appearance,
                 pdfVisualPolish,
+                corporatePrintLayout,
+                onCorporatePrintLayout: result => { corporateResult = result; },
                 onVisualPolish: result => { polishResult = result; },
                 onGeometryDiagnostics: diagnostics => { geometryDiagnostics = diagnostics; } });
             if (format === "pdf" && appearance === "exactView" && geometryDiagnostics &&
@@ -190,18 +202,13 @@ export function HtmlPdfExportView(props: HtmlPdfExportViewContainerProps): React
             }
             if (format === "word") normalizeWordSemantics(clone);
             const html = buildHtmlDocument(clone, { includeStyles: props.includeStyles,
-                appearanceMode: format === "word" ? "cleanReport" : appearance, pdfVisualPolish }, {
+                appearanceMode: format === "word" ? "cleanReport" : appearance, pdfVisualPolish,
+                corporatePrintLayout: corporateResult }, {
                 sourceWidth: geometry.width,
                 sourceHeight: geometry.height,
                 orientation
             });
             if (props.debugMode) {
-                const portraitWidth = (210 - 16) * 96 / 25.4;
-                const landscapeWidth = (297 - 16) * 96 / 25.4;
-                const portraitScale = Math.min(1, portraitWidth / geometry.width);
-                const landscapeScale = Math.min(1, landscapeWidth / geometry.width);
-                const selectedOrientation = orientation === "auto"
-                    ? chooseAutoOrientation(geometry.width, geometry.height, portraitWidth, landscapeWidth) : orientation;
                 console.info("HtmlPdfExportView captured", {
                     bytes: new Blob([html]).size,
                     appearanceMode: appearance,
@@ -230,13 +237,25 @@ export function HtmlPdfExportView(props: HtmlPdfExportViewContainerProps): React
                     scrollbarsHidden: polishResult?.scrollbarsHidden,
                     resizeGripsRemoved: polishResult?.resizeGripsRemoved,
                     trimmedTrailingWhitespace: geometryDiagnostics?.trimmedTrailingWhitespace,
-                    selectedOrientation,
-                    portraitScale,
-                    landscapeScale,
-                    chosenScale: selectedOrientation === "landscape" ? landscapeScale : portraitScale,
-                    finalScale: selectedOrientation === "landscape" ? landscapeScale : portraitScale,
+                    paperOrientation: corporateResult?.paperOrientation,
+                    paperWidthMm: corporateResult?.paperWidthMm,
+                    paperHeightMm: corporateResult?.paperHeightMm,
+                    horizontalMarginMm: corporateResult?.horizontalMarginMm,
+                    verticalMarginMm: corporateResult?.verticalMarginMm,
+                    printableWidth: corporateResult?.printableWidth,
+                    printableHeight: corporateResult?.printableHeight,
+                    meaningfulSourceWidth: corporateResult?.meaningfulSourceWidth,
+                    meaningfulSourceHeight: corporateResult?.meaningfulSourceHeight,
+                    finalScale: corporateResult?.finalScale,
+                    logicalSectionsFound: corporateResult?.logicalSectionsFound,
+                    keepWithNextGroups: corporateResult?.keepWithNextGroups,
+                    avoidBreakBlocks: corporateResult?.avoidBreakBlocks,
+                    forcedBreaksInserted: corporateResult?.forcedBreaksInserted,
+                    oversizeBlocksAllowedToSplit: corporateResult?.oversizeBlocksAllowedToSplit,
+                    tableHeaderGroups: corporateResult?.tableHeaderGroups,
+                    orphanBreaksPrevented: corporateResult?.orphanBreaksPrevented,
                     chromiumViewportWidth: geometry.width,
-                    printablePageWidth: selectedOrientation === "landscape" ? landscapeWidth : portraitWidth
+                    printablePageWidth: corporateResult?.printableWidth
                 });
             }
             if (format === "word" && props.onWordExport) {

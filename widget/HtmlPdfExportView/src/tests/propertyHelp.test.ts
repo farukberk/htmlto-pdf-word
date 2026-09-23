@@ -31,6 +31,7 @@ describe("Studio Pro property help", () => {
             , "Export Format", "Show Runtime Format Selector", "Current View Word Export Action", "FullData Word Export Action",
             "Show Export Button", "Auto Export On Load", "Auto Export Delay (ms)",
             "Hide Scrollbars in Export", "Expand Rendered Scroll Content", "Trim Viewport Whitespace",
+            "Horizontal Page Margin (mm)", "Vertical Page Margin (mm)", "Smart Page Breaks",
             "Open Generated File After Export", "Open Generated File Action"
         ]));
     });
@@ -54,6 +55,9 @@ describe("Studio Pro property help", () => {
         expect(defaultOf("hideScrollbarsInExport")).toBe("true");
         expect(defaultOf("expandRenderedScrollContent")).toBe("true");
         expect(defaultOf("trimViewportWhitespace")).toBe("true");
+        expect(defaultOf("horizontalPageMarginMm")).toBe("10");
+        expect(defaultOf("verticalPageMarginMm")).toBe("12");
+        expect(defaultOf("smartPageBreaks")).toBe("true");
         expect(defaultOf("batchMode")).toBe("auto");
         expect(defaultOf("batchSize")).toBe("5000");
     });

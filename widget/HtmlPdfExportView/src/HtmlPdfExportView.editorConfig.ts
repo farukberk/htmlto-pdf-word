@@ -34,6 +34,12 @@ export function check(values: HtmlPdfExportViewPreviewProps): Problem[] {
         problems.push({ property: values.exportFormat === "word" ? "onWordExport" : "onExport", severity: "error",
             message: "Configure the Current View export action before enabling Auto Export On Load." });
     }
+    if (values.horizontalPageMarginMm == null || values.horizontalPageMarginMm < 0 || values.horizontalPageMarginMm > 30) {
+        problems.push({ property: "horizontalPageMarginMm", severity: "error", message: "Horizontal Page Margin must be between 0 and 30 mm." });
+    }
+    if (values.verticalPageMarginMm == null || values.verticalPageMarginMm < 0 || values.verticalPageMarginMm > 30) {
+        problems.push({ property: "verticalPageMarginMm", severity: "error", message: "Vertical Page Margin must be between 0 and 30 mm." });
+    }
     if (values.openGeneratedFileAfterExport && values.exportFormat === "pdf" && values.exportScope === "currentView") {
         if (!values.onExport) problems.push({ property: "onExport", severity: "error", message: "Current View Export Action is required for two-stage PDF delivery." });
         if (!values.onAfterExport) problems.push({ property: "onAfterExport", severity: "error", message: "Open Generated File Action is required when Open Generated File After Export is enabled." });
