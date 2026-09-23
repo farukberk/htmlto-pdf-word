@@ -29,6 +29,10 @@ export function HtmlPdfExportView(props: HtmlPdfExportViewContainerProps): React
     const pendingPostExport = useRef<{ key: string; stage: "waitingStart" | "waitingFinish" | "scheduled" | "running" }>();
     const startTimer = useRef<number>();
     const postTimer = useRef<number>();
+    const captureAbort = useRef<AbortController>();
+    const mounted = useRef(true);
+    const mountEnvironment = useRef({ visibilityState: document.visibilityState,
+        hasFocus: typeof document.hasFocus === "function" ? document.hasFocus() : undefined });
     const postActionRef = useRef(props.onAfterExport);
     postActionRef.current = props.onAfterExport;
     const appearance = props.showRuntimeAppearanceSelector ? runtimeAppearance : props.appearanceMode;
@@ -48,6 +52,7 @@ export function HtmlPdfExportView(props: HtmlPdfExportViewContainerProps): React
                 pending.stage = "waitingFinish";
                 if (startTimer.current !== undefined) window.clearTimeout(startTimer.current);
             } else if (pending.stage === "waitingFinish" && !isExecuting) {
+                if (props.debugMode) console.info("HtmlPdfExportView background export", { currentViewActionCompleted: true });
                 pending.stage = "scheduled";
                 postTimer.current = window.setTimeout(() => {
                     if (pendingPostExport.current !== pending || pending.stage !== "scheduled") return;
@@ -61,6 +66,7 @@ export function HtmlPdfExportView(props: HtmlPdfExportViewContainerProps): React
                     activeAction.current = "postExport";
                     observedExecuting.current = false;
                     try {
+                        if (props.debugMode) console.info("HtmlPdfExportView background export", { postExportActionStarted: true });
                         postAction.execute({ ExportKey: pending.key });
                         startTimer.current = window.setTimeout(() => {
                             if (pendingPostExport.current !== pending || observedExecuting.current) return;
@@ -84,7 +90,10 @@ export function HtmlPdfExportView(props: HtmlPdfExportViewContainerProps): React
             : Boolean(props.onExport?.isExecuting);
         if (isExecuting) observedExecuting.current = true;
         if (activeAction.current === "postExport") {
-            if (observedExecuting.current && !isExecuting) finishExport();
+            if (observedExecuting.current && !isExecuting) {
+                if (props.debugMode) console.info("HtmlPdfExportView background export", { postExportActionCompleted: true });
+                finishExport();
+            }
             return;
         }
         if (observedExecuting.current && !isExecuting) finishExport();
@@ -106,9 +115,14 @@ export function HtmlPdfExportView(props: HtmlPdfExportViewContainerProps): React
         setBusy(false);
     }
 
-    useEffect(() => () => {
-        if (startTimer.current !== undefined) window.clearTimeout(startTimer.current);
-        if (postTimer.current !== undefined) window.clearTimeout(postTimer.current);
+    useEffect(() => {
+        mounted.current = true;
+        return () => {
+            mounted.current = false;
+            captureAbort.current?.abort();
+            if (startTimer.current !== undefined) window.clearTimeout(startTimer.current);
+            if (postTimer.current !== undefined) window.clearTimeout(postTimer.current);
+        };
     }, []);
 
     const exportContent = useCallback(async (trigger: "manual" | "auto" = "manual") => {
@@ -119,9 +133,21 @@ export function HtmlPdfExportView(props: HtmlPdfExportViewContainerProps): React
         setBusy(true);
         setExportError(undefined);
         if (trigger === "auto" && scope === "currentView" && rootRef.current) {
-            const stability = await waitForCaptureStability(rootRef.current);
-            if (props.debugMode) console.info("HtmlPdfExportView capture stability", stability);
-            if (!rootRef.current) { finishExport(); return; }
+            captureAbort.current?.abort();
+            const controller = new AbortController();
+            captureAbort.current = controller;
+            const stability = await waitForCaptureStability(rootRef.current, 1500, controller.signal);
+            if (props.debugMode) console.info("HtmlPdfExportView background export", {
+                autoExportStarted: true, autoExportDelayMs: props.autoExportDelayMs,
+                documentVisibilityStateAtMount: mountEnvironment.current.visibilityState,
+                documentVisibilityStateAtCapture: document.visibilityState,
+                documentHasFocusAtMount: mountEnvironment.current.hasFocus,
+                documentHasFocusAtCapture: typeof document.hasFocus === "function" ? document.hasFocus() : undefined,
+                rafFallbackUsed: stability.rafFallbackUsed, rafFallbackCount: stability.rafFallbackCount,
+                layoutSettleDurationMs: stability.layoutSettleDurationMs, captureStarted: !stability.cancelled
+            });
+            if (!mounted.current) return;
+            if (stability.cancelled || !rootRef.current) { finishExport(); return; }
         }
         if (scope !== "currentView") {
             try {
@@ -265,6 +291,7 @@ export function HtmlPdfExportView(props: HtmlPdfExportViewContainerProps): React
                 if (props.openGeneratedFileAfterExport) pendingPostExport.current = { key: exportKey, stage: "waitingStart" };
                 props.onExport.execute({ HtmlContent: html, ExportKey: exportKey });
                 activeAction.current = "currentView";
+                if (props.debugMode) console.info("HtmlPdfExportView background export", { currentViewActionStarted: true });
                 if (props.openGeneratedFileAfterExport) {
                     startTimer.current = window.setTimeout(() => {
                         if (pendingPostExport.current?.key !== exportKey || pendingPostExport.current.stage !== "waitingStart") return;
@@ -293,9 +320,8 @@ export function HtmlPdfExportView(props: HtmlPdfExportViewContainerProps): React
     useEffect(() => {
         if (!props.autoExportOnLoad || autoExportTriggeredRef.current) return;
         const delay = Number.isFinite(props.autoExportDelayMs) ? Math.max(0, Math.min(10_000, props.autoExportDelayMs)) : 500;
-        let timeout: number | undefined;
-        const frame = window.requestAnimationFrame(() => { timeout = window.setTimeout(() => setAutoDelayElapsed(true), delay); });
-        return () => { window.cancelAnimationFrame(frame); if (timeout !== undefined) window.clearTimeout(timeout); };
+        const timeout = window.setTimeout(() => setAutoDelayElapsed(true), delay);
+        return () => window.clearTimeout(timeout);
     }, [props.autoExportOnLoad, props.autoExportDelayMs]);
 
     const currentViewAction = format === "word" ? props.onWordExport : props.onExport;

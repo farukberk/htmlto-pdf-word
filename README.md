@@ -1371,6 +1371,10 @@ Current View PDF uses A4 Portrait by default. Explicit Landscape remains A4 Land
 
 Applications can optionally add reusable print-control classes: `pdf-section` marks a logical section, `pdf-keep-with-next` keeps an element with its next meaningful sibling, `pdf-avoid-break` keeps a page-sized block intact, and `pdf-page-break-before` starts an element on a new page. For example, use `<section class="pdf-section pdf-avoid-break">...</section>` for a short summary card. These classes affect only the export clone and are not required for generic smart pagination.
 
+## Background-tab-safe Auto Export
+
+Current View Auto Export no longer requires the preview tab to receive focus. The configured **Auto Export Delay** retains the same semantics, while every layout-settle wait that uses `requestAnimationFrame` has a bounded timer fallback and hidden tabs use the timer path directly. Browsers may throttle background timers, so completion can occur somewhat later than the configured delay, but no visibility-change or focus event is required. The existing ExportKey and two-stage generation-then-open ordering are unchanged.
+
 After Auto Export Delay, capture also waits for fonts and visible images where available, takes at least two animation-frame samples, and briefly waits for width/content/text metrics to stabilize (at most about 1.5 seconds of additional capture preparation). Auto orientation uses the measured desktop width and meaningful report height; wide reports can select Landscape before proportional paper fitting. Debug Mode reports only counts and dimensions—including visible text before/after normalization, clipping, expanded containers, selected orientation, and scale—not business text or form values. A local generic nested-report fixture exercises value retention, natural section flow, scroll/flex cleanup, and fixed-height safety; the real corporate PDF still needs side-by-side validation.
 
 ### PDF Visual Polish

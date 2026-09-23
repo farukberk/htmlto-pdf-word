@@ -1,5 +1,10 @@
 # Changelog
 
+## Background-tab-safe Current View Auto Export
+
+- Removed the foreground-paint dependency from Auto Export Delay scheduling and added bounded timer fallbacks to every layout-settle animation-frame wait.
+- Preserved one-shot capture, ExportKey, and two-stage PDF delivery while allowing hidden and unfocused preview tabs to complete autonomously.
+
 ## Corporate Print Layout & Smart Pagination
 
 - Added a Portrait-first A4 print box with configurable symmetric horizontal/vertical margins and centered source-width fitting.

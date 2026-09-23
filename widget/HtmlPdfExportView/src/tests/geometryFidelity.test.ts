@@ -140,7 +140,8 @@ describe("capture stability", () => {
         window.setTimeout(() => { root.querySelector("span")!.textContent = "First Second"; }, 40);
         const result = waitForCaptureStability(root, 500);
         await vi.advanceTimersByTimeAsync(120);
-        expect(await result).toEqual({ stable: true, samples: expect.any(Number) });
+        expect(await result).toEqual(expect.objectContaining({ stable: true, samples: expect.any(Number),
+            cancelled: false }));
     });
 
     it("stops waiting at the configured maximum", async () => {

@@ -5,6 +5,9 @@ import { HtmlPdfExportView } from "../HtmlPdfExportView";
 import { createExportKey } from "../export/exportKey";
 import { HtmlPdfExportViewContainerProps } from "../../typings/HtmlPdfExportViewProps";
 
+const originalVisibility = Object.getOwnPropertyDescriptor(document, "visibilityState");
+const originalHasFocus = Object.getOwnPropertyDescriptor(document, "hasFocus");
+
 function props(overrides: Record<string, unknown> = {}): HtmlPdfExportViewContainerProps {
     return {
         name: "export", class: "", content: <div>Two-stage report</div>, exportFormat: "pdf",
@@ -27,7 +30,11 @@ describe("two-stage Current View PDF export", () => {
         Object.defineProperty(URL, "createObjectURL", { configurable: true, value: vi.fn(() => "blob:test") });
         vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => undefined);
     });
-    afterEach(() => { cleanup(); vi.useRealTimers(); vi.restoreAllMocks(); });
+    afterEach(() => {
+        cleanup(); vi.useRealTimers(); vi.restoreAllMocks();
+        if (originalVisibility) Object.defineProperty(document, "visibilityState", originalVisibility);
+        if (originalHasFocus) Object.defineProperty(document, "hasFocus", originalHasFocus);
+    });
 
     it("creates unique non-empty keys with a safe fallback", () => {
         const first = createExportKey(), second = createExportKey();
@@ -85,6 +92,42 @@ describe("two-stage Current View PDF export", () => {
         act(() => vi.advanceTimersByTime(2_000));
         expect(generate).toHaveBeenCalledTimes(1);
         expect(open).toHaveBeenCalledTimes(1);
+    });
+
+    it("completes the one-shot two-stage auto flow while hidden, unfocused and without RAF", async () => {
+        Object.defineProperty(document, "visibilityState", { configurable: true, value: "hidden" });
+        Object.defineProperty(document, "hasFocus", { configurable: true, value: () => false });
+        Object.defineProperty(window, "requestAnimationFrame", { configurable: true, value: vi.fn(() => 17) });
+        const generate = vi.fn(), open = vi.fn();
+        const base = props({ autoExportOnLoad: true, autoExportDelayMs: 1000,
+            onExport: { canExecute: true, isExecuting: false, execute: generate },
+            onAfterExport: { canExecute: true, isExecuting: false, execute: open } });
+        const view = render(<HtmlPdfExportView {...base} />);
+        await act(async () => { await vi.advanceTimersByTimeAsync(1_000); });
+        await act(async () => { await vi.advanceTimersByTimeAsync(500); });
+        expect(generate).toHaveBeenCalledTimes(1);
+        view.rerender(<HtmlPdfExportView {...props({ ...base,
+            onExport: { ...base.onExport, isExecuting: true } })} />);
+        view.rerender(<HtmlPdfExportView {...base} />);
+        await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+        expect(open).toHaveBeenCalledExactlyOnceWith({ ExportKey: generate.mock.calls[0][0].ExportKey });
+        view.rerender(<HtmlPdfExportView {...props({ ...base,
+            onAfterExport: { ...base.onAfterExport, isExecuting: true } })} />);
+        view.rerender(<HtmlPdfExportView {...base} />);
+        await act(async () => { await vi.advanceTimersByTimeAsync(2_000); });
+        expect(generate).toHaveBeenCalledTimes(1); expect(open).toHaveBeenCalledTimes(1);
+    });
+
+    it("cancels delayed hidden-tab export work when unmounted", async () => {
+        Object.defineProperty(document, "visibilityState", { configurable: true, value: "hidden" });
+        Object.defineProperty(window, "requestAnimationFrame", { configurable: true, value: vi.fn(() => 19) });
+        const generate = vi.fn();
+        const view = render(<HtmlPdfExportView {...props({ autoExportOnLoad: true, autoExportDelayMs: 1000,
+            openGeneratedFileAfterExport: false,
+            onExport: { canExecute: true, isExecuting: false, execute: generate } })} />);
+        view.unmount();
+        await vi.advanceTimersByTimeAsync(3_000);
+        expect(generate).not.toHaveBeenCalled();
     });
 
     it("allows a new manual export with a new key after the first post action finishes", () => {
