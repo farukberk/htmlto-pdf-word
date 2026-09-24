@@ -30,6 +30,9 @@ describe("Studio Pro property help", () => {
             "Batch Mode", "Batch Size", "Batch Collection Path", "Debug Mode"
             , "Export Format", "Show Runtime Format Selector", "Current View Word Export Action", "FullData Word Export Action",
             "Show Export Button", "Auto Export On Load", "Auto Export Delay (ms)",
+            "Show Processing Notice", "Processing Notice Title", "Processing Notice Message",
+            "Success Notice Title", "Success Notice Message", "Error Notice Title", "Error Notice Message",
+            "Success Notice Duration (ms)",
             "Hide Scrollbars in Export", "Expand Rendered Scroll Content", "Trim Viewport Whitespace",
             "Horizontal Page Margin (mm)", "Vertical Page Margin (mm)", "Smart Page Breaks",
             "Open Generated File After Export", "Open Generated File Action"
@@ -51,6 +54,9 @@ describe("Studio Pro property help", () => {
         expect(defaultOf("showExportButton")).toBe("true");
         expect(defaultOf("autoExportOnLoad")).toBe("false");
         expect(defaultOf("autoExportDelayMs")).toBe("500");
+        expect(defaultOf("showProcessingNotice")).toBe("true");
+        expect(defaultOf("processingNoticeTitle")).toBe("PDF'iniz hazırlanıyor...");
+        expect(defaultOf("successNoticeDurationMs")).toBe("1500");
         expect(defaultOf("openGeneratedFileAfterExport")).toBe("false");
         expect(defaultOf("hideScrollbarsInExport")).toBe("true");
         expect(defaultOf("expandRenderedScrollContent")).toBe("true");

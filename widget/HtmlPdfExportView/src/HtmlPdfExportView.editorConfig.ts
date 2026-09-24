@@ -34,6 +34,9 @@ export function check(values: HtmlPdfExportViewPreviewProps): Problem[] {
         problems.push({ property: values.exportFormat === "word" ? "onWordExport" : "onExport", severity: "error",
             message: "Configure the Current View export action before enabling Auto Export On Load." });
     }
+    if (values.successNoticeDurationMs == null || values.successNoticeDurationMs < 0 || values.successNoticeDurationMs > 10_000) {
+        problems.push({ property: "successNoticeDurationMs", severity: "error", message: "Success Notice Duration must be between 0 and 10000 ms." });
+    }
     if (values.horizontalPageMarginMm == null || values.horizontalPageMarginMm < 0 || values.horizontalPageMarginMm > 30) {
         problems.push({ property: "horizontalPageMarginMm", severity: "error", message: "Horizontal Page Margin must be between 0 and 30 mm." });
     }

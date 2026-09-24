@@ -12,6 +12,8 @@ import { PdfVisualPolishOptions, PdfVisualPolishResult } from "./capture/pdfVisu
 import { CorporatePrintDiagnostics, CorporatePrintLayoutOptions } from "./capture/corporatePrintLayout";
 import "./ui/HtmlPdfExportView.css";
 
+type NoticeState = "idle" | "processing" | "success" | "error";
+
 export function HtmlPdfExportView(props: HtmlPdfExportViewContainerProps): ReactElement {
     const rootRef = useRef<HTMLDivElement>(null);
     const [exportError, setExportError] = useState<string>();
@@ -20,6 +22,7 @@ export function HtmlPdfExportView(props: HtmlPdfExportViewContainerProps): React
     const [runtimeOrientation, setRuntimeOrientation] = useState(props.pdfOrientation);
     const [runtimeFormat, setRuntimeFormat] = useState(props.exportFormat);
     const [busy, setBusy] = useState(false);
+    const [noticeState, setNoticeState] = useState<NoticeState>("idle");
     const [autoDelayElapsed, setAutoDelayElapsed] = useState(false);
     const clickGuard = useRef(false);
     const autoExportTriggeredRef = useRef(false);
@@ -29,6 +32,7 @@ export function HtmlPdfExportView(props: HtmlPdfExportViewContainerProps): React
     const pendingPostExport = useRef<{ key: string; stage: "waitingStart" | "waitingFinish" | "scheduled" | "running" }>();
     const startTimer = useRef<number>();
     const postTimer = useRef<number>();
+    const successNoticeTimer = useRef<number>();
     const captureAbort = useRef<AbortController>();
     const mounted = useRef(true);
     const mountEnvironment = useRef({ visibilityState: document.visibilityState,
@@ -59,7 +63,7 @@ export function HtmlPdfExportView(props: HtmlPdfExportViewContainerProps): React
                     const postAction = postActionRef.current;
                     if (!postAction || !postAction.canExecute || postAction.isExecuting) {
                         setExportError("Open Generated File Action is not ready. The PDF may already be stored.");
-                        finishExport();
+                        finishExport("error");
                         return;
                     }
                     pending.stage = "running";
@@ -71,13 +75,13 @@ export function HtmlPdfExportView(props: HtmlPdfExportViewContainerProps): React
                         startTimer.current = window.setTimeout(() => {
                             if (pendingPostExport.current !== pending || observedExecuting.current) return;
                             setExportError("Open Generated File Action did not start. The PDF may already be stored.");
-                            finishExport();
+                            finishExport("error");
                         }, 30_000);
                     }
                     catch (error) {
                         setExportError("Open Generated File Action failed. The PDF may already be stored.");
                         if (props.debugMode) console.error("HtmlPdfExportView post-export action failed", error);
-                        finishExport();
+                        finishExport("error");
                     }
                 }, 0);
             }
@@ -92,18 +96,33 @@ export function HtmlPdfExportView(props: HtmlPdfExportViewContainerProps): React
         if (activeAction.current === "postExport") {
             if (observedExecuting.current && !isExecuting) {
                 if (props.debugMode) console.info("HtmlPdfExportView background export", { postExportActionCompleted: true });
-                finishExport();
+                finishExport("success");
             }
             return;
         }
-        if (observedExecuting.current && !isExecuting) finishExport();
+        if (observedExecuting.current && !isExecuting) finishExport("success");
         const fallback = window.setTimeout(() => {
-            if (!observedExecuting.current) finishExport();
+            if (!observedExecuting.current) finishExport("success");
         }, 1500);
         return () => window.clearTimeout(fallback);
     });
 
-    function finishExport(): void {
+    function transitionNotice(state: NoticeState): void {
+        if (successNoticeTimer.current !== undefined) window.clearTimeout(successNoticeTimer.current);
+        successNoticeTimer.current = undefined;
+        setNoticeState(state);
+        if (props.debugMode) console.info("HtmlPdfExportView notice", { noticeState: state });
+        if (state === "success") {
+            const duration = Number.isFinite(props.successNoticeDurationMs)
+                ? Math.max(0, Math.min(10_000, props.successNoticeDurationMs)) : 1500;
+            successNoticeTimer.current = window.setTimeout(() => {
+                successNoticeTimer.current = undefined;
+                if (mounted.current) setNoticeState("idle");
+            }, duration);
+        }
+    }
+
+    function finishExport(outcome: "success" | "error" | "idle" = "success"): void {
         if (startTimer.current !== undefined) window.clearTimeout(startTimer.current);
         if (postTimer.current !== undefined) window.clearTimeout(postTimer.current);
         startTimer.current = undefined;
@@ -113,6 +132,7 @@ export function HtmlPdfExportView(props: HtmlPdfExportViewContainerProps): React
         activeAction.current = undefined;
         observedExecuting.current = false;
         setBusy(false);
+        transitionNotice(outcome);
     }
 
     useEffect(() => {
@@ -122,6 +142,7 @@ export function HtmlPdfExportView(props: HtmlPdfExportViewContainerProps): React
             captureAbort.current?.abort();
             if (startTimer.current !== undefined) window.clearTimeout(startTimer.current);
             if (postTimer.current !== undefined) window.clearTimeout(postTimer.current);
+            if (successNoticeTimer.current !== undefined) window.clearTimeout(successNoticeTimer.current);
         };
     }, []);
 
@@ -130,6 +151,7 @@ export function HtmlPdfExportView(props: HtmlPdfExportViewContainerProps): React
         clickGuard.current = true;
         if (trigger === "manual" && props.autoExportOnLoad) autoExportTriggeredRef.current = true;
         const exportKey = createExportKey();
+        if (format === "pdf") transitionNotice("processing");
         setBusy(true);
         setExportError(undefined);
         if (trigger === "auto" && scope === "currentView" && rootRef.current) {
@@ -147,7 +169,7 @@ export function HtmlPdfExportView(props: HtmlPdfExportViewContainerProps): React
                 layoutSettleDurationMs: stability.layoutSettleDurationMs, captureStarted: !stability.cancelled
             });
             if (!mounted.current) return;
-            if (stability.cancelled || !rootRef.current) { finishExport(); return; }
+            if (stability.cancelled || !rootRef.current) { finishExport("idle"); return; }
         }
         if (scope !== "currentView") {
             try {
@@ -182,7 +204,7 @@ export function HtmlPdfExportView(props: HtmlPdfExportViewContainerProps): React
                 const technicalMessage = error instanceof Error ? error.message : "FullData export failed.";
                 setExportError(userMessage(technicalMessage));
                 if (props.debugMode) console.error("HtmlPdfExportView FullData export failed", { scope, message: technicalMessage });
-                finishExport();
+                finishExport("error");
             }
             return;
         }
@@ -296,7 +318,7 @@ export function HtmlPdfExportView(props: HtmlPdfExportViewContainerProps): React
                     startTimer.current = window.setTimeout(() => {
                         if (pendingPostExport.current?.key !== exportKey || pendingPostExport.current.stage !== "waitingStart") return;
                         setExportError("Current View export action did not start. No file-open action was run.");
-                        finishExport();
+                        finishExport("error");
                     }, 30_000);
                 }
             } else {
@@ -306,23 +328,24 @@ export function HtmlPdfExportView(props: HtmlPdfExportViewContainerProps): React
                 link.download = props.fileName || "export.html";
                 link.click();
                 URL.revokeObjectURL(url);
-                finishExport();
+                finishExport("success");
             }
         } catch (error) {
             const technicalMessage = error instanceof Error ? error.message : "Current View export failed.";
             setExportError(/Current View export action|Open Generated File Action|export content/i.test(technicalMessage) ? technicalMessage : userMessage(technicalMessage));
             if (props.debugMode) console.error("HtmlPdfExportView Current View export failed", { format, message: technicalMessage });
-            finishExport();
+            finishExport("error");
         }
     }, [props, appearance, scope, orientation, format, fullDataConfigured]);
 
     exportContentRef.current = exportContent;
     useEffect(() => {
         if (!props.autoExportOnLoad || autoExportTriggeredRef.current) return;
+        if (format === "pdf") transitionNotice("processing");
         const delay = Number.isFinite(props.autoExportDelayMs) ? Math.max(0, Math.min(10_000, props.autoExportDelayMs)) : 500;
         const timeout = window.setTimeout(() => setAutoDelayElapsed(true), delay);
         return () => window.clearTimeout(timeout);
-    }, [props.autoExportOnLoad, props.autoExportDelayMs]);
+    }, [props.autoExportOnLoad, props.autoExportDelayMs, format]);
 
     const currentViewAction = format === "word" ? props.onWordExport : props.onExport;
     useEffect(() => {
@@ -330,11 +353,13 @@ export function HtmlPdfExportView(props: HtmlPdfExportViewContainerProps): React
         if (scope !== "currentView") {
             autoExportTriggeredRef.current = true;
             setExportError("Auto Export On Load supports Current View only.");
+            transitionNotice("error");
             return;
         }
         if (!currentViewAction) {
             autoExportTriggeredRef.current = true;
             setExportError("Configure the Current View export action before enabling Auto Export On Load.");
+            transitionNotice("error");
             return;
         }
         if (!currentViewAction.canExecute || currentViewAction.isExecuting) return;
@@ -347,6 +372,23 @@ export function HtmlPdfExportView(props: HtmlPdfExportViewContainerProps): React
 
     return <>
         <div ref={rootRef} className={props.class} style={props.style} data-html-pdf-export-view="true">{props.content}</div>
+        {props.showProcessingNotice !== false && format === "pdf" && noticeState !== "idle" &&
+            <div className={`html-pdf-export-notice html-pdf-export-notice--${noticeState}`}
+                data-html-pdf-export-exclude="true" role="status"
+                aria-live={noticeState === "error" ? "assertive" : "polite"} aria-atomic="true">
+                <span className="html-pdf-export-notice__icon" aria-hidden="true">
+                    {noticeState === "processing" ? <span className="html-pdf-export-notice__spinner" />
+                        : noticeState === "success" ? "✓" : "!"}
+                </span>
+                <div><p className="html-pdf-export-notice__title">{noticeState === "processing"
+                    ? props.processingNoticeTitle || "PDF'iniz hazırlanıyor..."
+                    : noticeState === "success" ? props.successNoticeTitle || "PDF hazırlandı"
+                    : props.errorNoticeTitle || "PDF oluşturulamadı"}</p>
+                <p className="html-pdf-export-notice__message">{noticeState === "processing"
+                    ? props.processingNoticeMessage || "Lütfen işlem tamamlanana kadar bu sekmeden ayrılmayınız. PDF hazır olduğunda dosyanız otomatik olarak açılacaktır."
+                    : noticeState === "success" ? props.successNoticeMessage || "Dosyanız açılıyor..."
+                    : props.errorNoticeMessage || "İşlem sırasında bir hata oluştu. Lütfen tekrar deneyiniz."}</p></div>
+            </div>}
         {(props.showExportButton || props.showRuntimeAppearanceSelector || props.showRuntimeScopeSelector || props.showRuntimeOrientationSelector || props.showRuntimeFormatSelector || exportError) &&
             <div className="html-pdf-export-runtime-controls" data-html-pdf-export-exclude="true" aria-busy={busy}>
                 {props.showRuntimeFormatSelector && <label>Format

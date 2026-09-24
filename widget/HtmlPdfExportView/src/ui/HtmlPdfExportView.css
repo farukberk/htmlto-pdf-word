@@ -34,3 +34,42 @@
     flex-basis: 100%;
     color: var(--brand-danger, #a94442);
 }
+
+.html-pdf-export-notice {
+    position: fixed;
+    top: 16px;
+    left: 50%;
+    z-index: 10000;
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    width: min(720px, calc(100vw - 32px));
+    padding: 14px 16px;
+    transform: translateX(-50%);
+    pointer-events: none;
+    color: #263238;
+    background: #f5f8fa;
+    border: 1px solid #cbd6dc;
+    border-radius: 6px;
+    box-shadow: 0 3px 12px rgb(0 0 0 / 14%);
+}
+
+.html-pdf-export-notice--success { color: #215c36; background: #f1f8f3; border-color: #b8d9c2; }
+.html-pdf-export-notice--error { color: #8b2e2b; background: #fff5f4; border-color: #e2b8b5; }
+.html-pdf-export-notice__title { margin: 0 0 3px; font-weight: 600; }
+.html-pdf-export-notice__message { margin: 0; line-height: 1.4; }
+.html-pdf-export-notice__icon { flex: 0 0 20px; width: 20px; height: 20px; text-align: center; }
+.html-pdf-export-notice__spinner {
+    display: block;
+    box-sizing: border-box;
+    width: 18px;
+    height: 18px;
+    border: 2px solid #b4c3ca;
+    border-top-color: #266c91;
+    border-radius: 50%;
+    animation: html-pdf-notice-spin 900ms linear infinite;
+}
+
+@keyframes html-pdf-notice-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .html-pdf-export-notice__spinner { animation: none; } }
+@media print { .html-pdf-export-notice { display: none !important; } }

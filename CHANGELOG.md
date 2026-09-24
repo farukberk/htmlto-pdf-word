@@ -1,5 +1,10 @@
 # Changelog
 
+## Export Processing Notice
+
+- Added configurable, accessible processing, success, and error notices covering Auto Export Delay through the complete observable two-stage PDF pipeline.
+- Kept the fixed browser-only notice outside the capture boundary and explicitly excluded it from exported HTML/PDF geometry.
+
 ## Background-tab-safe Current View Auto Export
 
 - Removed the foreground-paint dependency from Auto Export Delay scheduling and added bounded timer fallbacks to every layout-settle animation-frame wait.

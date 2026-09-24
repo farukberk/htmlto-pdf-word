@@ -1375,6 +1375,10 @@ Applications can optionally add reusable print-control classes: `pdf-section` ma
 
 Current View Auto Export no longer requires the preview tab to receive focus. The configured **Auto Export Delay** retains the same semantics, while every layout-settle wait that uses `requestAnimationFrame` has a bounded timer fallback and hidden tabs use the timer path directly. Browsers may throttle background timers, so completion can occur somewhat later than the configured delay, but no visibility-change or focus event is required. The existing ExportKey and two-stage generation-then-open ordering are unchanged.
 
+## Export Processing Notice
+
+The browser displays a fixed, non-blocking status notice during PDF preparation, including the entire Auto Export Delay, Current View capture, generation action, and optional post-export/open action. After the observable pipeline completes it briefly displays a success state; detectable failures display a persistent generic error until another export begins. **Show Processing Notice**, all processing/success/error text, and **Success Notice Duration (ms)** are configurable in Studio Pro. The notice is a sibling of the capture boundary, carries `data-html-pdf-export-exclude="true"`, and has print-CSS protection, so it never changes report geometry or appears in Exact View or Clean Report output.
+
 After Auto Export Delay, capture also waits for fonts and visible images where available, takes at least two animation-frame samples, and briefly waits for width/content/text metrics to stabilize (at most about 1.5 seconds of additional capture preparation). Auto orientation uses the measured desktop width and meaningful report height; wide reports can select Landscape before proportional paper fitting. Debug Mode reports only counts and dimensions—including visible text before/after normalization, clipping, expanded containers, selected orientation, and scale—not business text or form values. A local generic nested-report fixture exercises value retention, natural section flow, scroll/flex cleanup, and fixed-height safety; the real corporate PDF still needs side-by-side validation.
 
 ### PDF Visual Polish
