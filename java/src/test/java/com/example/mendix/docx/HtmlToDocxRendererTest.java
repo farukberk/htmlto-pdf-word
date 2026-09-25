@@ -41,6 +41,20 @@ class HtmlToDocxRendererTest {
         assertEquals("landscape", orientation(render("<table><tr><td>1</td><td>2</td><td>3</td><td>4</td><td>5</td><td>6</td><td>7</td></tr></table>", DocxOrientation.AUTO)));
     }
 
+    @Test void appliesCorporateMarginsAndNativePagination() throws Exception {
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        new HtmlToDocxRenderer().render("<h2>Başlık</h2><table><thead><tr><th>A</th></tr></thead><tbody><tr><td>B</td></tr></tbody></table>", "", out,
+            new DocxRenderOptions(DocxOrientation.PORTRAIT, 10, 12, true));
+        try (XWPFDocument doc = new XWPFDocument(new ByteArrayInputStream(out.toByteArray()))) {
+            var margins = doc.getDocument().getBody().getSectPr().getPgMar();
+            assertEquals(567, ((java.math.BigInteger)margins.getLeft()).longValue(), 1); assertEquals(567, ((java.math.BigInteger)margins.getRight()).longValue(), 1);
+            assertEquals(680, ((java.math.BigInteger)margins.getTop()).longValue(), 1); assertEquals(680, ((java.math.BigInteger)margins.getBottom()).longValue(), 1);
+            assertTrue(doc.getParagraphs().get(0).isKeepNext());
+            assertTrue(doc.getParagraphs().get(0).getCTP().getPPr().isSetKeepLines());
+            assertTrue(doc.getTables().get(0).getRow(0).isRepeatHeader());
+        }
+    }
+
     @Test void rendersFullDataThroughFreeMarker() throws Exception {
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         new FullDataDocxRenderer().render("<h1>${title}</h1><table><#list rows as row><tr><td>${row.name}</td></tr></#list></table>", "{\"title\":\"AllFiltered\",\"rows\":[{\"name\":\"FIRST\"},{\"name\":\"LAST\"}]}", "", out, DocxOrientation.PORTRAIT);

@@ -13,7 +13,10 @@
   },
   "description": "Transparent Mendix HTML export boundary",
   "license": "Apache-2.0",
-  "files": ["dist", "src"],
+  "files": [
+    "dist",
+    "src"
+  ],
   "scripts": {
     "build": "pluggable-widgets-tools build:web",
     "release": "pluggable-widgets-tools release:web",
@@ -23,16 +26,11 @@
   "devDependencies": {
     "@mendix/pluggable-widgets-tools": "10.24.1",
     "@testing-library/react": "16.3.0",
-    "@types/react": "^18.2.0",
-    "@types/react-dom": "^18.2.0",
     "jsdom": "26.1.0",
     "typescript": "5.9.2",
     "vitest": "3.2.4"
   },
-  "dependencies": {
-    "react": "^18.2.0",
-    "react-dom": "^18.2.0"
-  },
+  "dependencies": {},
   "resolutions": {
     "react": "^18.2.0",
     "react-dom": "^18.2.0",

@@ -71,6 +71,20 @@ describe("two-stage Current View PDF export", () => {
         expect(URL.createObjectURL).not.toHaveBeenCalled();
     });
 
+    it("uses the same ExportKey-ordered two-stage flow for Word", () => {
+        const generate = vi.fn(), open = vi.fn();
+        const base = props({ exportFormat: "word", horizontalPageMarginMm: 10, verticalPageMarginMm: 12, smartPageBreaks: true,
+            onWordExport: { canExecute: true, isExecuting: false, execute: generate },
+            onAfterExport: { canExecute: true, isExecuting: false, execute: open } });
+        const view = render(<HtmlPdfExportView {...base} />);
+        fireEvent.click(screen.getByRole("button", { name: "Export" }));
+        const key = generate.mock.calls[0][0].ExportKey;
+        expect(generate.mock.calls[0][0]).toMatchObject({ Orientation: "portrait", SmartPageBreaks: true, ExportKey: key });
+        view.rerender(<HtmlPdfExportView {...props({ ...base, onWordExport: { ...base.onWordExport, isExecuting: true } })} />);
+        view.rerender(<HtmlPdfExportView {...base} />); act(() => vi.advanceTimersByTime(0));
+        expect(open).toHaveBeenCalledExactlyOnceWith({ ExportKey: key });
+    });
+
     it("uses the same pipeline for auto export while leaving the manual button visible", async () => {
         const generate = vi.fn(), open = vi.fn();
         const base = props({ autoExportOnLoad: true, autoExportDelayMs: 1000,

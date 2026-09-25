@@ -1741,3 +1741,10 @@ Amaç yalnızca bir DataGrid2 exporter oluşturmak değildir.
 Amaç:
 
 > Mendix uygulamalarında tekrar kullanılabilir, büyük veri destekli ve farklı çıktı formatlarına genişleyebilen bir export engine oluşturmaktır.
+# Word / DOCX export
+
+Word export produces editable WordprocessingML with Apache POI 5.4.1; it does not rasterize the report. Current View converts the captured DOM into semantic headings, paragraphs, nested lists, hyperlinks, images and native Word tables. Exact View is best-effort visual plus semantic fidelity because Word is not a browser; Clean Report removes interaction chrome and preserves displayed form values. DataGrid2 conversion includes only rendered rows. AllFiltered and Selected consume the host application's JSON through the FullData template path. DOCX templates preserve existing headers, footers, styles, section settings and tables while replacing the existing `{{path}}` syntax.
+
+Portrait, Landscape and Auto are supported. The shared horizontal/vertical margins default to 10/12 mm. Smart Page Breaks maps headings and rows to Word-native keep/repeat/cant-split settings rather than browser pixel pagination. Manual and Auto Export use the selected format; the processing notice is never inside captured content. Current View Word supports the same ExportKey-based generation-then-open action sequence as PDF.
+
+Supported styling is intentionally best effort: font family/size/weight/style, underline, six-digit hex text color, cell shading and paragraph alignment. PNG/JPEG data URLs and base-URI file images are embedded. SVG is retained as meaningful alternative text when it cannot be embedded natively; full browser CSS, web-font embedding, JavaScript layout and pixel-perfect flex/grid geometry are not promised. See `WORD_STUDIOPRO_SMOKE_TEST.md` for exact Studio Pro signatures and integration steps.

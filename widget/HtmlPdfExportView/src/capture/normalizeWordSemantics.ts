@@ -3,9 +3,26 @@ const INTERACTION_ONLY = "[aria-hidden='true'],[data-html-pdf-clean-filter-shell
 
 /** Converts cleaned browser-only layout structures into semantic HTML for editable DOCX rendering. */
 export function normalizeWordSemantics(root: Element): void {
+    replaceRuntimeControls(root);
     const candidates = Array.from(root.querySelectorAll("[role='grid'],[role='table'],.widget-datagrid"));
     candidates.filter(candidate => !candidate.closest("table") && root.contains(candidate)).forEach(convertGrid);
     convertHorizontalForms(root);
+}
+
+function replaceRuntimeControls(root: Element): void {
+    root.querySelectorAll("button,[data-html-pdf-export-exclude='true']").forEach(element => element.remove());
+    root.querySelectorAll("input,textarea,select").forEach(control => {
+        const replacement = document.createElement("span");
+        if (control instanceof HTMLInputElement && (control.type === "checkbox" || control.type === "radio")) {
+            replacement.textContent = control.type === "checkbox" ? (control.checked ? "☒" : "☐") : (control.checked ? "◉" : "○");
+        } else if (control instanceof HTMLSelectElement) {
+            replacement.textContent = Array.from(control.selectedOptions).map(option => option.textContent || option.value).join(", ");
+        } else {
+            replacement.textContent = (control as HTMLInputElement | HTMLTextAreaElement).value;
+        }
+        replacement.className = "html-pdf-word-runtime-value";
+        control.replaceWith(replacement);
+    });
 }
 
 function convertGrid(grid: Element): void {

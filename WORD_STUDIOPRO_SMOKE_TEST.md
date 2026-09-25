@@ -1,73 +1,33 @@
-# Word Studio Pro integration and smoke test
+# Word / DOCX Studio Pro 10.24 smoke test
 
-## Required Java Action declarations
+## Java actions
 
-Create or correct these actions in Studio Pro, then select **App > Deploy for Eclipse**. Do not edit generated declarations by hand.
+Create the actions below in module `HtmlPdfExport`. Keep generated code intact and call the shaded library only from `BEGIN USER CODE`.
 
-1. `JA_ConvertHtmlToDocx(Html:String, BaseUri:String, OutputFile:System.FileDocument, Orientation:String): Nothing`
-2. `JA_RenderFullDataToDocx(TemplateContent:String, ReportJson:String, BaseUri:String, OutputFile:System.FileDocument, Orientation:String): Nothing`
-3. `JA_RenderDocxTemplate(TemplateFile:System.FileDocument, ReportJson:String, OutputFile:System.FileDocument): Nothing`
+- `JA_ConvertHtmlToDocx(Html:String, BaseUri:String, OutputFile:System.FileDocument, Orientation:String, HorizontalMarginMm:Integer, VerticalMarginMm:Integer, SmartPageBreaks:Boolean): Nothing`
+- `JA_RenderFullDataToDocx(TemplateContent:String, ReportJson:String, BaseUri:String, OutputFile:System.FileDocument, Orientation:String, HorizontalMarginMm:Integer, VerticalMarginMm:Integer, SmartPageBreaks:Boolean): Nothing`
+- `JA_RenderDocxTemplate(TemplateFile:System.FileDocument, ReportJson:String, OutputFile:System.FileDocument): Nothing`
 
-The currently generated `JA_ConvertHtmlToDocx` has `TemplateFile, ReportJson, OutputFile`; that is the template action signature, not the required Current View conversion signature. Correct it in Studio Pro. After deployment, rerun the integration task so only the generated `BEGIN USER CODE` regions are populated.
+Generate into a `ByteArrayOutputStream`, then store it with `Core.storeFileDocumentContent(context, outputFile, inputStream)`. Set a `.docx` name and commit the FileDocument before returning.
 
-## Current View Word
+## Current View and two-stage open flow
 
-Create `ACT_CurrentViewToWord` with parameters `HtmlContent:String` and `Orientation:String`.
+1. Put `HtmlPdfExport.HtmlPdfExportView` around the report and set Export Format to Word, Scope to Current View.
+2. Connect **Current View Word Export Action** to a microflow with the six generated action variables. Create a GeneratedExportFile, assign its unique `ExportKey`, call `JA_ConvertHtmlToDocx`, set the name to `Report.docx`, and commit.
+3. Enable **Open Generated File After Export** and connect **Open Generated File Action**. Retrieve exactly one file by `ExportKey`, then use Download File. The widget calls this only after generation completes.
+4. Test Exact View and Clean Report, Portrait/Landscape/Auto, manual Export Word, Auto Export On Load, and a background browser tab. Confirm one generation and one download.
 
-Flow:
+## FullData and Selected
 
-1. Create a `System.FileDocument` specialization.
-2. Set its name to `CurrentView-<timestamp>.docx`.
-3. Call `JA_ConvertHtmlToDocx` with `Html = $HtmlContent`, `BaseUri = ''`, `OutputFile = created FileDocument`, and `Orientation = $Orientation`.
-4. Commit the output object.
-5. Download it with **Show file in browser = No**.
+Connect **FullData Word Export Action** to a microflow that receives application-supplied ReportJson, TemplateContent, ExportScope and Orientation. Use All Filtered JSON for AllFiltered and selected-object JSON for Selected; do not query DataGrid internals. Call `JA_RenderFullDataToDocx`, store and download the FileDocument.
 
-Map the widget's **Current View Word Export Action** variables `HtmlContent` and `Orientation` to this microflow.
+## Template mode
 
-## FullData Word
+Create a DOCX FileDocument containing `{{path}}` placeholders and optional repeated table-row placeholders such as `{{rows[].name}}`. Call `JA_RenderDocxTemplate`. Verify headers, footers, styles and existing tables remain intact.
 
-Create `ACT_FullDataToWord` with parameters `TemplateContent:String`, `ReportJson:String`, `ExportScope:String`, and `Orientation:String`.
+## Acceptance checklist
 
-Flow:
-
-1. Create a `System.FileDocument` specialization named `FullData-<timestamp>.docx`.
-2. Call `JA_RenderFullDataToDocx` with `TemplateContent = $TemplateContent`, `ReportJson = $ReportJson`, `BaseUri = ''`, `OutputFile = created FileDocument`, and `Orientation = $Orientation`.
-3. Commit and download with **Show file in browser = No**.
-
-`ExportScope` determines which dataset the host application supplied. The renderer does not need it. Map the widget's **FullData Word Export Action** variables to this microflow.
-
-## DOCX template
-
-Create `ACT_RenderWordTemplate` with parameters `TemplateFile:System.FileDocument` and `ReportJson:String`.
-
-Flow:
-
-1. Create an output `System.FileDocument` specialization named `TemplateReport-<timestamp>.docx`.
-2. Call `JA_RenderDocxTemplate` with `TemplateFile = $TemplateFile`, `ReportJson = $ReportJson`, and `OutputFile = created FileDocument`.
-3. Commit and download with **Show file in browser = No**.
-
-Use `examples/word-template-example.docx` as the non-sensitive test template.
-
-## Real smoke-test checklist
-
-### Current View Word
-
-- DOCX opens without a repair or corruption warning.
-- Title, description, date, selected Active value, and selected Status value are correct and editable.
-- DataGrid content is a native editable Word table.
-- RichText headings, paragraphs, emphasis, lists, and links remain semantic.
-- `ç Ç ğ Ğ ı İ ö Ö ş Ş ü Ü` render correctly.
-
-### FullData Word
-
-- The complete application-supplied dataset is exported.
-- The Word table is editable.
-- First and last expected records are present.
-- Portrait, Landscape, and Auto work.
-
-### Template Word
-
-- Sample DOCX template loads without repair warnings.
-- Scalar and split-run placeholders are replaced.
-- Repeating table rows are populated.
-- Header, footer, logo, and page-number field remain present.
+- Use a real DataGrid2 with five or more columns and multiple rendered rows; verify order, header count, cell values and editable Word cells.
+- Include RichText headings, nested bullet/numbered lists, a hyperlink, PNG/JPEG image, Turkish Unicode and live form controls.
+- Verify 10 mm left/right and 12 mm top/bottom defaults, repeated table headers, heading keep-with-next, and both page orientations.
+- Open the downloaded DOCX in desktop Word. Search/copy text, edit a table cell, click the hyperlink, inspect the image, and ensure the file opens without repair warnings.

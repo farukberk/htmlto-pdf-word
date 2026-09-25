@@ -43,9 +43,9 @@
                     <enumerationValue key="auto">Auto</enumerationValue>
                 </enumerationValues>
             </property>
-            <property key="horizontalPageMarginMm" type="integer" defaultValue="10"><caption>Horizontal Page Margin (mm)</caption><description>Sets equal left and right PDF page margins in millimeters. The report is centered inside the remaining printable width. Default: 10 mm. Allowed range: 0 through 30 mm.</description></property>
-            <property key="verticalPageMarginMm" type="integer" defaultValue="12"><caption>Vertical Page Margin (mm)</caption><description>Sets equal top and bottom PDF page margins in millimeters. Default: 12 mm. Allowed range: 0 through 30 mm.</description></property>
-            <property key="smartPageBreaks" type="boolean" defaultValue="true"><caption>Smart Page Breaks</caption><description>Improves PDF pagination by avoiding orphan headings, keeping short report blocks together where possible, and preventing header rows from being separated from their first data rows. Large blocks that exceed one page are still allowed to split naturally.</description></property>
+            <property key="horizontalPageMarginMm" type="integer" defaultValue="10"><caption>Horizontal Page Margin (mm)</caption><description>Sets equal left and right PDF or Word page margins in millimeters. The report is centered inside the remaining printable width. Default: 10 mm. Allowed range: 0 through 30 mm.</description></property>
+            <property key="verticalPageMarginMm" type="integer" defaultValue="12"><caption>Vertical Page Margin (mm)</caption><description>Sets equal top and bottom PDF or Word page margins in millimeters. Default: 12 mm. Allowed range: 0 through 30 mm.</description></property>
+            <property key="smartPageBreaks" type="boolean" defaultValue="true"><caption>Smart Page Breaks</caption><description>Improves PDF and Word pagination by avoiding orphan headings, keeping short report blocks together where possible, and repeating table headers. Word uses native pagination properties. Large blocks still split naturally.</description></property>
             <property key="hideScrollbarsInExport" type="boolean" defaultValue="true"><caption>Hide Scrollbars in Export</caption><description>Hides vertical and horizontal scrollbar chrome from exported PDF/HTML while preserving the report content and source layout. Recommended for both Exact View and Clean Report.</description></property>
             <property key="expandRenderedScrollContent" type="boolean" defaultValue="true"><caption>Expand Rendered Scroll Content</caption><description>Expands safe scroll-constrained report containers in the export clone so already-rendered content can flow naturally without visible scrollbars. This does not load records that are not already rendered.</description></property>
             <property key="trimViewportWhitespace" type="boolean" defaultValue="true"><caption>Trim Viewport Whitespace</caption><description>Removes artificial empty space caused by browser viewport shells such as 100vh, percentage-height, or flex-fill containers while preserving intentional report spacing.</description></property>
@@ -81,8 +81,8 @@
             </property>
             <property key="onWordExport" type="action" required="false">
                 <caption>Current View Word Export Action</caption>
-                <description>Application action for Current View Word export. It receives cleaned standalone semantic HTML plus Portrait, Landscape, or Auto orientation and should store the generated .docx in a System.FileDocument. Leave empty only when Word format is unavailable.</description>
-                <actionVariables><actionVariable key="HtmlContent" type="String" caption="Editable HTML"/><actionVariable key="Orientation" type="String" caption="Word orientation"/></actionVariables>
+                <description>Application action for Current View Word export. It receives editable semantic HTML, orientation, shared margins, native pagination setting, and ExportKey. Store the generated .docx in a System.FileDocument.</description>
+                <actionVariables><actionVariable key="HtmlContent" type="String" caption="Editable HTML"/><actionVariable key="Orientation" type="String" caption="Word orientation"/><actionVariable key="HorizontalMarginMm" type="Integer" caption="Left/right margin in mm"/><actionVariable key="VerticalMarginMm" type="Integer" caption="Top/bottom margin in mm"/><actionVariable key="SmartPageBreaks" type="Boolean" caption="Use native Word pagination"/><actionVariable key="ExportKey" type="String" caption="Unique export key"/></actionVariables>
             </property>
             <property key="fullDataJson" type="expression" required="false">
                 <caption>Report JSON</caption>
@@ -109,7 +109,7 @@
             <property key="onFullDataWordExport" type="action" required="false">
                 <caption>FullData Word Export Action</caption>
                 <description>Application integration point for All Filtered and Selected Word exports. It receives complete application-supplied Report JSON, FreeMarker template, scope, and orientation; it is independent from DataGrid pagination and never falls back to Current View.</description>
-                <actionVariables><actionVariable key="ReportJson" type="String" caption="Report JSON"/><actionVariable key="TemplateContent" type="String" caption="FreeMarker template"/><actionVariable key="ExportScope" type="String" caption="Export scope"/><actionVariable key="Orientation" type="String" caption="Word orientation"/></actionVariables>
+                <actionVariables><actionVariable key="ReportJson" type="String" caption="Report JSON"/><actionVariable key="TemplateContent" type="String" caption="FreeMarker template"/><actionVariable key="ExportScope" type="String" caption="Export scope"/><actionVariable key="Orientation" type="String" caption="Word orientation"/><actionVariable key="HorizontalMarginMm" type="Integer" caption="Left/right margin in mm"/><actionVariable key="VerticalMarginMm" type="Integer" caption="Top/bottom margin in mm"/><actionVariable key="SmartPageBreaks" type="Boolean" caption="Use native Word pagination"/><actionVariable key="ExportKey" type="String" caption="Unique export key"/></actionVariables>
             </property>
         </propertyGroup>
         <propertyGroup caption="Large Exports">

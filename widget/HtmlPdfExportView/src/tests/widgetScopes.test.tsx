@@ -180,7 +180,7 @@ describe("HtmlPdfExportView scope integration", () => {
         })} />);
         fireEvent.click(screen.getByRole("button", { name: "Export Word" }));
         expect(pdfExecute).not.toHaveBeenCalled();
-        expect(wordExecute).toHaveBeenCalledWith({ ReportJson: '{"rows":[1]}', TemplateContent: "template", ExportScope: "selected", Orientation: "portrait" });
+        expect(wordExecute).toHaveBeenCalledWith(expect.objectContaining({ ReportJson: '{"rows":[1]}', TemplateContent: "template", ExportScope: "selected", Orientation: "portrait", SmartPageBreaks: true, ExportKey: expect.any(String) }));
     });
 
     it("supports an accessible runtime format selector and Word busy state", () => {

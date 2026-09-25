@@ -11,6 +11,7 @@ import org.openxmlformats.schemas.wordprocessingml.x2006.main.*;
 import javax.xml.namespace.QName;
 import java.io.*;
 import java.net.URI;
+import java.net.URLConnection;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.*;
@@ -22,15 +23,20 @@ public final class HtmlToDocxRenderer implements DocxRenderer {
 
     @Override
     public void render(String html, String baseUri, OutputStream output, DocxOrientation requested) throws IOException {
+        render(html, baseUri, output, DocxRenderOptions.defaults(requested));
+    }
+
+    @Override
+    public void render(String html, String baseUri, OutputStream output, DocxRenderOptions options) throws IOException {
         if (html == null) throw new IllegalArgumentException("HTML is required.");
         Objects.requireNonNull(output, "Output stream is required.");
         org.jsoup.nodes.Document source = Jsoup.parse(html, baseUri == null ? "" : baseUri);
         try (XWPFDocument target = new XWPFDocument()) {
             configureMetadata(target, source);
-            DocxOrientation orientation = requested == DocxOrientation.AUTO ? chooseOrientation(source) : requested;
-            configurePage(target, orientation);
+            DocxOrientation orientation = options.orientation() == DocxOrientation.AUTO ? chooseOrientation(source) : options.orientation();
+            configurePage(target, orientation, options.horizontalMarginMm(), options.verticalMarginMm());
             NumberingIds numbering = createNumbering(target);
-            Context context = new Context(target, baseUri, numbering);
+            Context context = new Context(target, baseUri, numbering, options.smartPageBreaks());
             for (Node child : source.body().childNodes()) appendBlock(context, child);
             removeInitialEmptyParagraph(target);
             target.write(output);
@@ -49,6 +55,7 @@ public final class HtmlToDocxRenderer implements DocxRenderer {
         if (tag.matches("h[1-6]")) {
             XWPFParagraph p = c.document.createParagraph();
             p.setStyle("Heading" + tag.substring(1));
+            if (c.smartPageBreaks) { p.setKeepNext(true); keepLines(p); }
             applyParagraphCss(p, element);
             appendInline(c, p, element, Style.PLAIN);
         } else if (tag.equals("p")) {
@@ -113,6 +120,7 @@ public final class HtmlToDocxRenderer implements DocxRenderer {
             Elements cells = directChildren(rows.get(r), "th", "td");
             XWPFTableRow row = table.getRow(r);
             if (r == 0 || rows.get(r).parent() != null && rows.get(r).parent().normalName().equals("thead")) row.setRepeatHeader(true);
+            if (c.smartPageBreaks && rows.get(r).text().length() < 500) row.setCantSplitRow(true);
             for (int col = 0; col < columns; col++) {
                 XWPFTableCell cell = row.getCell(col); cell.removeParagraph(0);
                 if (columnWidths.size() == columns && !columnWidths.get(col).isBlank()) cell.setWidth(columnWidths.get(col));
@@ -134,7 +142,8 @@ public final class HtmlToDocxRenderer implements DocxRenderer {
             int width = parsePixels(image.attr("width"), 320), height = parsePixels(image.attr("height"), 180);
             p.createRun().addPicture(new ByteArrayInputStream(data.bytes), data.type, "image", Units.pixelToEMU(width), Units.pixelToEMU(height));
         } catch (Exception ignored) {
-            // An inaccessible optional image must not invalidate otherwise editable document content.
+            String alternative = image.attr("alt").trim();
+            if (!alternative.isBlank()) addText(p, "[Image: " + alternative + "]", Style.PLAIN);
         }
     }
 
@@ -148,8 +157,15 @@ public final class HtmlToDocxRenderer implements DocxRenderer {
             bytes = header.contains(";base64") ? Base64.getDecoder().decode(src.substring(comma + 1)) : URI.create(src).getPath().getBytes();
         } else {
             URI uri = baseUri == null || baseUri.isBlank() ? URI.create(src) : URI.create(baseUri).resolve(src);
-            if (!"file".equalsIgnoreCase(uri.getScheme()) && uri.getScheme() != null) return null;
-            bytes = Files.readAllBytes(uri.getScheme() == null ? Path.of(uri.getPath()) : Path.of(uri));
+            if ("http".equalsIgnoreCase(uri.getScheme()) || "https".equalsIgnoreCase(uri.getScheme())) {
+                URLConnection connection = uri.toURL().openConnection(); connection.setConnectTimeout(5000); connection.setReadTimeout(10000);
+                try (InputStream input = connection.getInputStream()) { bytes = input.readNBytes(10 * 1024 * 1024 + 1); }
+                if (bytes.length > 10 * 1024 * 1024) throw new IOException("Image exceeds the 10 MB safety limit.");
+                media = connection.getContentType() == null ? uri.getPath() : connection.getContentType();
+            } else {
+                if (!"file".equalsIgnoreCase(uri.getScheme()) && uri.getScheme() != null) return null;
+                bytes = Files.readAllBytes(uri.getScheme() == null ? Path.of(uri.getPath()) : Path.of(uri));
+            }
         }
         int type = media.toLowerCase().contains("png") || isPng(bytes) ? org.apache.poi.xwpf.usermodel.Document.PICTURE_TYPE_PNG : org.apache.poi.xwpf.usermodel.Document.PICTURE_TYPE_JPEG;
         return new ImageData(bytes, type);
@@ -190,6 +206,9 @@ public final class HtmlToDocxRenderer implements DocxRenderer {
     private static String normalizeColor(String color) {
         if (color == null) return null; color = color.trim();
         if (color.matches("#[0-9a-fA-F]{6}")) return color.substring(1).toUpperCase();
+        if (color.matches("#[0-9a-fA-F]{3}")) return ("" + color.charAt(1) + color.charAt(1) + color.charAt(2) + color.charAt(2) + color.charAt(3) + color.charAt(3)).toUpperCase();
+        java.util.regex.Matcher rgb = java.util.regex.Pattern.compile("rgba?\\(\\s*(\\d{1,3})\\s*,\\s*(\\d{1,3})\\s*,\\s*(\\d{1,3})(?:\\s*,[^)]*)?\\)", java.util.regex.Pattern.CASE_INSENSITIVE).matcher(color);
+        if (rgb.matches()) return String.format("%02X%02X%02X", Math.min(255, Integer.parseInt(rgb.group(1))), Math.min(255, Integer.parseInt(rgb.group(2))), Math.min(255, Integer.parseInt(rgb.group(3))));
         return null;
     }
 
@@ -203,7 +222,7 @@ public final class HtmlToDocxRenderer implements DocxRenderer {
         return maxColumns > 6 ? DocxOrientation.LANDSCAPE : DocxOrientation.PORTRAIT;
     }
 
-    private static void configurePage(XWPFDocument doc, DocxOrientation orientation) {
+    private static void configurePage(XWPFDocument doc, DocxOrientation orientation, int horizontalMarginMm, int verticalMarginMm) {
         CTSectPr section = doc.getDocument().getBody().isSetSectPr() ? doc.getDocument().getBody().getSectPr() : doc.getDocument().getBody().addNewSectPr();
         CTPageSz size = section.isSetPgSz() ? section.getPgSz() : section.addNewPgSz();
         boolean landscape = orientation == DocxOrientation.LANDSCAPE;
@@ -211,12 +230,21 @@ public final class HtmlToDocxRenderer implements DocxRenderer {
         size.setH(java.math.BigInteger.valueOf(landscape ? A4_PORTRAIT_W : A4_PORTRAIT_H));
         size.setOrient(landscape ? STPageOrientation.LANDSCAPE : STPageOrientation.PORTRAIT);
         CTPageMar margins = section.isSetPgMar() ? section.getPgMar() : section.addNewPgMar();
-        margins.setTop(java.math.BigInteger.valueOf(1134)); margins.setBottom(java.math.BigInteger.valueOf(1134)); margins.setLeft(java.math.BigInteger.valueOf(1134)); margins.setRight(java.math.BigInteger.valueOf(1134));
+        java.math.BigInteger horizontal = java.math.BigInteger.valueOf(mmToTwips(horizontalMarginMm));
+        java.math.BigInteger vertical = java.math.BigInteger.valueOf(mmToTwips(verticalMarginMm));
+        margins.setTop(vertical); margins.setBottom(vertical); margins.setLeft(horizontal); margins.setRight(horizontal);
+    }
+
+    private static long mmToTwips(int millimeters) { return Math.round(millimeters * 1440d / 25.4d); }
+
+    private static void keepLines(XWPFParagraph paragraph) {
+        CTPPr properties = paragraph.getCTP().isSetPPr() ? paragraph.getCTP().getPPr() : paragraph.getCTP().addNewPPr();
+        if (!properties.isSetKeepLines()) properties.addNewKeepLines();
     }
 
     private static NumberingIds createNumbering(XWPFDocument doc) {
         XWPFNumbering numbering = doc.createNumbering();
-        return new NumberingIds(addNumbering(numbering, false), addNumbering(numbering, true));
+        return new NumberingIds(addNumbering(numbering, true), addNumbering(numbering, false));
     }
 
     private static java.math.BigInteger addNumbering(XWPFNumbering numbering, boolean ordered) {
@@ -236,7 +264,7 @@ public final class HtmlToDocxRenderer implements DocxRenderer {
         return result;
     }
 
-    private record Context(XWPFDocument document, String baseUri, NumberingIds numbering) {}
+    private record Context(XWPFDocument document, String baseUri, NumberingIds numbering, boolean smartPageBreaks) {}
     private record NumberingIds(java.math.BigInteger ordered, java.math.BigInteger bullet) {}
     private record ImageData(byte[] bytes, int type) {}
     private record Style(boolean bold, boolean italic, boolean underline, String color, Integer fontSize, String fontFamily) {

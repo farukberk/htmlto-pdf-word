@@ -9,4 +9,9 @@ public final class JA_ConvertHtmlToDocx {
     public static void execute(String html, String baseUri, OutputStream fileDocumentStream, String orientation) throws IOException {
         new HtmlToDocxRenderer().render(html, baseUri, fileDocumentStream, DocxOrientation.parse(orientation));
     }
+    public static void execute(String html, String baseUri, OutputStream fileDocumentStream, String orientation,
+                               int horizontalMarginMm, int verticalMarginMm, boolean smartPageBreaks) throws IOException {
+        new HtmlToDocxRenderer().render(html, baseUri, fileDocumentStream,
+            new DocxRenderOptions(DocxOrientation.parse(orientation), horizontalMarginMm, verticalMarginMm, smartPageBreaks));
+    }
 }

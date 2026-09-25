@@ -12,8 +12,12 @@ public final class FullDataDocxRenderer {
     FullDataDocxRenderer(FreeMarkerHtmlRenderer htmlRenderer, DocxRenderer docxRenderer) { this.htmlRenderer = htmlRenderer; this.docxRenderer = docxRenderer; }
 
     public void render(String templateContent, String reportJson, String baseUri, OutputStream output, DocxOrientation orientation) throws IOException {
+        render(templateContent, reportJson, baseUri, output, DocxRenderOptions.defaults(orientation));
+    }
+
+    public void render(String templateContent, String reportJson, String baseUri, OutputStream output, DocxRenderOptions options) throws IOException {
         try {
-            docxRenderer.render(htmlRenderer.render(templateContent, reportJson), baseUri, output, orientation);
+            docxRenderer.render(htmlRenderer.render(templateContent, reportJson), baseUri, output, options);
         } catch (com.example.mendix.rendering.HtmlRenderingException e) {
             throw new DocxRenderingException("The FullData Word document could not be generated.", e);
         }

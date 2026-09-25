@@ -1,5 +1,13 @@
 # Changelog
 
+## Production-ready Word and DOCX export parity
+
+- Added editable Current View DOCX output with best-effort Exact View fidelity and Clean Report normalization, including runtime form values and semantic DataGrid2 tables.
+- Completed FullData AllFiltered/Selected and DOCX-template workflows while preserving document headers, footers, styles, tables, hyperlinks, images, rich text, lists, and Turkish Unicode.
+- Added Portrait, Landscape, and Auto orientation, configurable 10/12 mm corporate margins, native smart page breaks, repeating table headers, and safe multi-page flow.
+- Extended processing/success/error notices, Auto Export, background-tab scheduling, and ExportKey-based two-stage generation/open behavior to Word.
+- Validated the shaded Apache POI implementation through DOCX reopen/package tests and 100, 1K, 5K, 10K, and 25K row benchmarks; the complete PDF regression suite remains green.
+
 ## Export Processing Notice
 
 - Added configurable, accessible processing, success, and error notices covering Auto Export Delay through the complete observable two-stage PDF pipeline.

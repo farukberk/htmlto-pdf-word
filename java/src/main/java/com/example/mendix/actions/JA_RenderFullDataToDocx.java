@@ -9,4 +9,9 @@ public final class JA_RenderFullDataToDocx {
     public static void execute(String templateContent, String reportJson, String baseUri, OutputStream fileDocumentStream, String orientation) throws IOException {
         new FullDataDocxRenderer().render(templateContent, reportJson, baseUri, fileDocumentStream, DocxOrientation.parse(orientation));
     }
+    public static void execute(String templateContent, String reportJson, String baseUri, OutputStream fileDocumentStream, String orientation,
+                               int horizontalMarginMm, int verticalMarginMm, boolean smartPageBreaks) throws IOException {
+        new FullDataDocxRenderer().render(templateContent, reportJson, baseUri, fileDocumentStream,
+            new DocxRenderOptions(DocxOrientation.parse(orientation), horizontalMarginMm, verticalMarginMm, smartPageBreaks));
+    }
 }

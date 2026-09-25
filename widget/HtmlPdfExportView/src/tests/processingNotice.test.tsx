@@ -43,6 +43,14 @@ describe("export processing notice", () => {
         expect(screen.getByText("PDF'iniz hazırlanıyor...")).toBeTruthy();
     });
 
+    it("uses format-aware Word notice text and excludes it from DOCX HTML", () => {
+        const execute = vi.fn();
+        render(<HtmlPdfExportView {...props({ exportFormat: "word", onWordExport: { canExecute: true, isExecuting: false, execute } })} />);
+        fireEvent.click(screen.getByRole("button", { name: "Export Word" }));
+        expect(screen.getByRole("status").textContent).toContain("Belgeniz hazırlanıyor");
+        expect(execute.mock.calls[0][0].HtmlContent).not.toContain("html-pdf-export-notice");
+    });
+
     it("stays processing through capture and the Current View action", async () => {
         const execute = vi.fn(); const action = { canExecute: true, isExecuting: false, execute };
         const view = render(<HtmlPdfExportView {...props({ autoExportOnLoad: true, autoExportDelayMs: 0, onExport: action })} />);

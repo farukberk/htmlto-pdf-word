@@ -52,7 +52,14 @@ export interface HtmlPdfExportViewContainerProps {
     showRuntimeOrientationSelector: boolean;
     showRuntimeFormatSelector: boolean;
     onExport?: ActionValue<{ HtmlContent: Option<string>; ExportKey: Option<string> }>;
-    onWordExport?: ActionValue<{ HtmlContent: Option<string>; Orientation: Option<string> }>;
+    onWordExport?: ActionValue<{
+        HtmlContent: Option<string>;
+        Orientation: Option<string>;
+        HorizontalMarginMm: Option<Big>;
+        VerticalMarginMm: Option<Big>;
+        SmartPageBreaks: Option<boolean>;
+        ExportKey: Option<string>;
+    }>;
     fullDataJson?: DynamicValue<string>;
     fullDataTemplate?: DynamicValue<string>;
     onFullDataExport?: ActionValue<{
@@ -68,6 +75,10 @@ export interface HtmlPdfExportViewContainerProps {
         TemplateContent: Option<string>;
         ExportScope: Option<string>;
         Orientation: Option<string>;
+        HorizontalMarginMm: Option<Big>;
+        VerticalMarginMm: Option<Big>;
+        SmartPageBreaks: Option<boolean>;
+        ExportKey: Option<string>;
     }>;
     batchMode: BatchModeEnum;
     batchSize: number;
