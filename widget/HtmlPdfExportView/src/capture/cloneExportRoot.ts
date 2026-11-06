@@ -5,6 +5,7 @@ import { captureGeometrySnapshot, GeometryDiagnostics, normalizeExactViewGeometr
 import { applyPdfVisualPolish, PdfVisualPolishOptions, PdfVisualPolishResult } from "./pdfVisualPolish";
 import { applyCorporatePrintLayout, bindCorporateLayoutSnapshot, captureCorporateLayoutSnapshot,
     CorporatePrintDiagnostics, CorporatePrintLayoutOptions } from "./corporatePrintLayout";
+import { inlineComputedStyles } from "./collectStyles";
 
 export interface CloneOptions { includeImages: boolean; appearanceMode?: ExportAppearanceMode;
     onGeometryDiagnostics?: (diagnostics: GeometryDiagnostics) => void;
@@ -18,6 +19,7 @@ export function cloneExportRoot(root: HTMLElement, options: CloneOptions): HTMLE
     const snapshot = ((options.appearanceMode ?? "exactView") === "exactView" || options.pdfVisualPolish)
         ? captureGeometrySnapshot(root) : undefined;
     const clone = root.cloneNode(true) as HTMLElement;
+    inlineComputedStyles(root, clone);
     const boundCorporateSnapshot = corporateSnapshot ? bindCorporateLayoutSnapshot(clone, corporateSnapshot) : undefined;
     synchronizeFormState(root, clone);
     if (snapshot) {

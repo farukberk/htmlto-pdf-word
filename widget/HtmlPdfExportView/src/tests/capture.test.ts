@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { cloneExportRoot } from "../capture/cloneExportRoot";
 import { buildHtmlDocument } from "../capture/buildHtmlDocument";
-import { collectStyles } from "../capture/collectStyles";
+import { collectStyles, inlineComputedStyles } from "../capture/collectStyles";
 import { DEFAULT_PDF_ORIENTATION, measureSourceGeometry } from "../capture/measureSourceGeometry";
 
 describe("CurrentView capture", () => {
@@ -264,6 +264,23 @@ describe("CurrentView capture", () => {
         const inaccessible = { get cssRules(): CSSRuleList { throw new DOMException("blocked", "SecurityError"); } } as CSSStyleSheet;
         Object.defineProperty(document, "styleSheets", { configurable: true, value: [inaccessible] });
         expect(() => collectStyles(document)).not.toThrow();
+    });
+
+    it("preserves computed font properties when the source depends on external ancestors", () => {
+        const shell = document.createElement("div");
+        shell.style.fontFamily = '"Segoe UI", Arial, sans-serif';
+        shell.style.fontSize = "15px";
+        shell.style.lineHeight = "22px";
+        const source = document.createElement("div");
+        source.innerHTML = "<h2>Başlık</h2><p>İstanbul çğıöşü PDF font testi</p>";
+        shell.append(source); document.body.append(shell);
+        const clone = source.cloneNode(true) as HTMLElement;
+        inlineComputedStyles(source, clone);
+        const paragraph = clone.querySelector("p") as HTMLElement;
+        expect(paragraph.style.fontFamily).toContain("Segoe UI");
+        expect(paragraph.style.fontWeight).toBe("");
+        expect(paragraph.style.fontStyle).toBe("");
+        shell.remove();
     });
 
     it("preserves resolvable icon-font and background resources with absolute CSS URLs", () => {

@@ -28,5 +28,22 @@ function absolutizeCssUrls(cssText: string, baseUri: string): string {
     });
 }
 
-// Extension point: a future implementation can walk source/clone pairs and inline computed styles.
-export function inlineComputedStyles(_source: Element, _clone: Element): void {}
+/** Preserves the rendered font even when its selector depends on ancestors outside the export boundary. */
+export function inlineComputedStyles(source: Element, clone: Element): void {
+    const sourceElements = [source, ...Array.from(source.querySelectorAll("*"))];
+    const cloneElements = [clone, ...Array.from(clone.querySelectorAll("*"))];
+    sourceElements.forEach((sourceElement, index) => {
+        const cloneElement = cloneElements[index];
+        if (!(sourceElement instanceof HTMLElement) || !(cloneElement instanceof HTMLElement)) return;
+        const family = inheritedComputedValue(sourceElement, "font-family");
+        if (family) cloneElement.style.setProperty("font-family", family);
+    });
+}
+
+function inheritedComputedValue(element: HTMLElement, property: string): string {
+    for (let current: HTMLElement | null = element; current; current = current.parentElement) {
+        const value = current.ownerDocument.defaultView?.getComputedStyle(current).getPropertyValue(property).trim();
+        if (value) return value;
+    }
+    return "";
+}
