@@ -360,6 +360,7 @@ Current View export sırasında mümkün olduğunca aşağıdaki stil kaynaklar�
 - CSS variables
 - typography
 - authenticated `@font-face` web fonts (WOFF/WOFF2/TTF/OTF are embedded into the standalone Current View HTML when accessible)
+- protected or cross-origin font stylesheets are recovered through credentialed CSS retrieval or loaded-font resource observation when direct `cssRules` access is blocked
 - colors
 - backgrounds
 - borders

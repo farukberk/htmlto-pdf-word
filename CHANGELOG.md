@@ -25,6 +25,7 @@
 
 ## Unreleased
 
+- Added protected-stylesheet font recovery: inaccessible CSS is fetched with the active browser credentials, with a second fallback that matches loaded FontFace families to observed WOFF/WOFF2/TTF/OTF resources before embedding them.
 - Embedded accessible WOFF/WOFF2/TTF/OTF resources from `@font-face` rules into Current View standalone HTML, preserving authenticated corporate web fonts in headless PDF rendering and preventing fallback to Times New Roman.
 - Added shared Current View PDF Visual Polish for Exact View and Clean Report: scrollbar/resize-grip hiding, safe rendered-scroll expansion, and configurable viewport whitespace trimming (all enabled by default).
 - Unsafe virtualized or interactive scrollers keep their source geometry; visual polish never fetches additional records or changes two-stage export delivery.

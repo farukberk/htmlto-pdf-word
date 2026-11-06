@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { cloneExportRoot } from "../capture/cloneExportRoot";
 import { buildHtmlDocument } from "../capture/buildHtmlDocument";
-import { collectStyles, embedFontResources, inlineComputedStyles } from "../capture/collectStyles";
+import { collectStyles, collectStylesWithEmbeddedFonts, embedFontResources, inlineComputedStyles } from "../capture/collectStyles";
 import { DEFAULT_PDF_ORIENTATION, measureSourceGeometry } from "../capture/measureSourceGeometry";
 
 describe("CurrentView capture", () => {
@@ -305,7 +305,7 @@ describe("CurrentView capture", () => {
         });
         const embedded = await embedFontResources(css, fetchResource as typeof fetch);
         expect(fetchResource).toHaveBeenCalledOnce();
-        expect(fetchResource).toHaveBeenCalledWith("https://app.example/fonts/source.woff2", { credentials: "same-origin" });
+        expect(fetchResource).toHaveBeenCalledWith("https://app.example/fonts/source.woff2", { credentials: "include" });
         expect(embedded).toContain("data:font/woff2;base64,d09GRg==");
         expect(embedded).toContain("https://app.example/images/background.png");
     });
@@ -314,6 +314,42 @@ describe("CurrentView capture", () => {
         const css = "@font-face { font-family: SourceSansPro; src: url(https://app.example/fonts/source.woff2); }";
         const embedded = await embedFontResources(css, vi.fn().mockRejectedValue(new Error("blocked")) as typeof fetch);
         expect(embedded).toBe(css);
+    });
+
+    it("fetches a protected stylesheet and embeds its font rules", async () => {
+        const inaccessible = {
+            href: "https://assets.example/corporate/theme.css",
+            get cssRules(): CSSRuleList { throw new DOMException("blocked", "SecurityError"); }
+        } as CSSStyleSheet;
+        Object.defineProperty(document, "styleSheets", { configurable: true, value: [inaccessible] });
+        const fetchResource = vi.fn().mockImplementation(async (url: string) => url.endsWith("theme.css")
+            ? { ok: true, text: async () => "@font-face { font-family: SourceSansPro; src: url('../fonts/SourceSansPro-Regular.woff2'); }" }
+            : { ok: true, blob: async () => new Blob([new Uint8Array([119, 79, 70, 70])], { type: "font/woff2" }) });
+        const css = await collectStylesWithEmbeddedFonts(document, false, fetchResource as typeof fetch);
+        expect(fetchResource).toHaveBeenCalledWith("https://assets.example/corporate/theme.css", { credentials: "include" });
+        expect(fetchResource).toHaveBeenCalledWith("https://assets.example/fonts/SourceSansPro-Regular.woff2", { credentials: "include" });
+        expect(css).toContain("data:font/woff2;base64,d09GRg==");
+    });
+
+    it("recovers an observed loaded font when its stylesheet cannot be read or fetched", async () => {
+        const inaccessible = {
+            href: "https://assets.example/corporate/theme.css",
+            get cssRules(): CSSRuleList { throw new DOMException("blocked", "SecurityError"); }
+        } as CSSStyleSheet;
+        Object.defineProperty(document, "styleSheets", { configurable: true, value: [inaccessible] });
+        Object.defineProperty(document, "fonts", { configurable: true, value: [{
+            family: "SourceSansPro", status: "loaded", style: "normal", weight: "400", stretch: "normal"
+        }] });
+        const performance = document.defaultView?.performance as Performance;
+        vi.spyOn(performance, "getEntriesByType").mockReturnValue([
+            { name: "https://cdn.example/fonts/source-sans-pro-regular.woff2" } as PerformanceEntry
+        ]);
+        const fetchResource = vi.fn().mockImplementation(async (url: string) => url.endsWith("theme.css")
+            ? Promise.reject(new Error("CORS"))
+            : { ok: true, blob: async () => new Blob([new Uint8Array([119, 79, 70, 70])], { type: "font/woff2" }) });
+        const css = await collectStylesWithEmbeddedFonts(document, false, fetchResource as typeof fetch);
+        expect(css).toContain("font-family: \"SourceSansPro\"");
+        expect(css).toContain("data:font/woff2;base64,d09GRg==");
     });
 
     it("preserves image and SVG resources with resolvable absolute URLs", () => {

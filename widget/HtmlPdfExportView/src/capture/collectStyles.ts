@@ -15,8 +15,12 @@ export function collectStyles(doc: Document = document, excludeApplicationPrintR
 
 /** Embeds font binaries while the authenticated Mendix page can still access them. */
 export async function collectStylesWithEmbeddedFonts(doc: Document = document,
-                                                     excludeApplicationPrintRules = false): Promise<string> {
-    return embedFontResources(collectStyles(doc, excludeApplicationPrintRules), doc.defaultView?.fetch?.bind(doc.defaultView));
+                                                     excludeApplicationPrintRules = false,
+                                                     fetchResource: typeof fetch | undefined =
+                                                         doc.defaultView?.fetch?.bind(doc.defaultView)): Promise<string> {
+    const styles = await collectStylesWithFetchFallback(doc, excludeApplicationPrintRules, fetchResource);
+    const observedFonts = observedFontFaceFallbacks(doc, styles);
+    return embedFontResources([styles, observedFonts].filter(Boolean).join("\n"), fetchResource);
 }
 
 export async function embedFontResources(css: string, fetchResource: typeof fetch | undefined = globalThis.fetch): Promise<string> {
@@ -32,7 +36,7 @@ export async function embedFontResources(css: string, fetchResource: typeof fetc
     const embedded = new Map<string, string>();
     await Promise.all(Array.from(urls, async url => {
         try {
-            const response = await fetchResource(url, { credentials: "same-origin" });
+            const response = await fetchResource(url, { credentials: "include" });
             if (!response.ok) return;
             const blob = await response.blob();
             embedded.set(url, await blobToDataUrl(blob, fontMimeType(url, blob.type)));
@@ -45,6 +49,76 @@ export async function embedFontResources(css: string, fetchResource: typeof fetc
             const dataUrl = embedded.get(resource.trim());
             return dataUrl ? `url(${quote}${dataUrl}${quote})` : match;
         }));
+}
+
+async function collectStylesWithFetchFallback(doc: Document, excludeApplicationPrintRules: boolean,
+                                              fetchResource: typeof fetch | undefined): Promise<string> {
+    const css: string[] = [];
+    for (const sheet of Array.from(doc.styleSheets)) {
+        const baseUri = sheet.href || doc.baseURI;
+        try {
+            css.push(Array.from(sheet.cssRules)
+                .filter(rule => !excludeApplicationPrintRules || !isPrintMediaRule(rule))
+                .map(rule => absolutizeCssUrls(rule.cssText, baseUri)).join("\n"));
+        } catch (error) {
+            if (!(error instanceof DOMException) || error.name !== "SecurityError" || !sheet.href || !fetchResource) continue;
+            try {
+                const response = await fetchResource(sheet.href, { credentials: "include" });
+                if (!response.ok) continue;
+                css.push(absolutizeCssUrls(await response.text(), sheet.href));
+            } catch { /* The observed-font fallback below can still recover discoverable font resources. */ }
+        }
+    }
+    return css.join("\n");
+}
+
+function observedFontFaceFallbacks(doc: Document, existingCss: string): string {
+    const fontSet = doc.fonts as FontFaceSet | undefined;
+    const performance = doc.defaultView?.performance;
+    if (!fontSet || !performance?.getEntriesByType) return "";
+    const resources = performance.getEntriesByType("resource")
+        .map(entry => entry.name)
+        .filter(url => /\.(?:woff2?|ttf|otf)(?:[?#]|$)/i.test(url));
+    if (resources.length === 0) return "";
+    const declaredFamilies = new Set(Array.from(existingCss.matchAll(/@font-face\s*\{[^}]*font-family\s*:\s*(["']?)([^;"'}]+)\1/gi))
+        .map(match => normalizeFontName(match[2])));
+    const rules: string[] = [];
+    for (const face of Array.from(fontSet as unknown as Iterable<FontFace>)) {
+        if (face.status !== "loaded" || declaredFamilies.has(normalizeFontName(face.family))) continue;
+        const resource = bestFontResource(face, resources);
+        if (!resource) continue;
+        rules.push(`@font-face { font-family: ${quoteCssString(face.family)}; src: url(${quoteCssString(resource)}); ` +
+            `font-style: ${face.style}; font-weight: ${face.weight}; font-stretch: ${face.stretch}; }`);
+        declaredFamilies.add(normalizeFontName(face.family));
+    }
+    return rules.join("\n");
+}
+
+function bestFontResource(face: FontFace, resources: string[]): string | undefined {
+    const family = normalizeFontName(face.family);
+    if (!family) return undefined;
+    const matches = resources.filter(url => normalizeFontName(decodeURIComponent(url)).includes(family));
+    if (matches.length === 0) return resources.length === 1 ? resources[0] : undefined;
+    return matches.sort((left, right) => fontResourceScore(face, right) - fontResourceScore(face, left))[0];
+}
+
+function fontResourceScore(face: FontFace, url: string): number {
+    const value = normalizeFontName(decodeURIComponent(url));
+    const weight = Number.parseInt(face.weight, 10);
+    let score = 0;
+    if (face.style.toLowerCase().includes("italic") === value.includes("italic")) score += 4;
+    if (weight >= 700 && value.includes("bold")) score += 3;
+    else if (weight >= 600 && value.includes("semibold")) score += 3;
+    else if (weight <= 400 && (value.includes("regular") || value.includes("normal"))) score += 2;
+    return score;
+}
+
+function normalizeFontName(value: string): string {
+    return value.replace(/["']/g, "").replace(/[^a-z0-9]/gi, "").toLowerCase();
+}
+
+function quoteCssString(value: string): string {
+    return `"${value.replace(/\\/g, "\\\\").replace(/"/g, "\\\"")}"`;
 }
 
 function blobToDataUrl(blob: Blob, mimeType: string): Promise<string> {
