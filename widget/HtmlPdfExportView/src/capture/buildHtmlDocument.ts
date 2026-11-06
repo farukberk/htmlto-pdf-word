@@ -11,7 +11,7 @@ table { border-collapse: collapse; max-width: 100%; }
 img, svg { max-width: 100%; }`;
 
 export interface HtmlDocumentOptions { includeStyles: boolean; title?: string; appearanceMode?: "exactView" | "cleanReport";
-    pdfVisualPolish?: PdfVisualPolishOptions; corporatePrintLayout?: CorporatePrintDiagnostics; }
+    capturedStyles?: string; pdfVisualPolish?: PdfVisualPolishOptions; corporatePrintLayout?: CorporatePrintDiagnostics; }
 
 export interface ExportMetadata {
     sourceWidth: number;
@@ -20,7 +20,8 @@ export interface ExportMetadata {
 }
 
 export function buildHtmlDocument(root: Element, options: HtmlDocumentOptions, metadata?: ExportMetadata): string {
-    const styles = options.includeStyles ? collectStyles(document, options.appearanceMode === "exactView") : "";
+    const styles = options.includeStyles
+        ? options.capturedStyles ?? collectStyles(document, options.appearanceMode === "exactView") : "";
     const title = escapeHtml(options.title ?? document.title ?? "Export");
     const attributes = metadata
         ? ` data-html-pdf-source-width="${metadata.sourceWidth}" data-html-pdf-source-height="${metadata.sourceHeight}" data-html-pdf-orientation="${metadata.orientation}"`

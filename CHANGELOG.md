@@ -25,6 +25,7 @@
 
 ## Unreleased
 
+- Embedded accessible WOFF/WOFF2/TTF/OTF resources from `@font-face` rules into Current View standalone HTML, preserving authenticated corporate web fonts in headless PDF rendering and preventing fallback to Times New Roman.
 - Added shared Current View PDF Visual Polish for Exact View and Clean Report: scrollbar/resize-grip hiding, safe rendered-scroll expansion, and configurable viewport whitespace trimming (all enabled by default).
 - Unsafe virtualized or interactive scrollers keep their source geometry; visual polish never fetches additional records or changes two-stage export delivery.
 - Improved Exact View Current View geometry: source desktop-width preservation, meaningful content bounds, selective viewport/scroll/flex normalization, screen-style fidelity, and privacy-safe structural diagnostics.

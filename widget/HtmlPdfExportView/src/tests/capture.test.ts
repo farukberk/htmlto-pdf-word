@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { cloneExportRoot } from "../capture/cloneExportRoot";
 import { buildHtmlDocument } from "../capture/buildHtmlDocument";
-import { collectStyles, inlineComputedStyles } from "../capture/collectStyles";
+import { collectStyles, embedFontResources, inlineComputedStyles } from "../capture/collectStyles";
 import { DEFAULT_PDF_ORIENTATION, measureSourceGeometry } from "../capture/measureSourceGeometry";
 
 describe("CurrentView capture", () => {
@@ -294,6 +294,26 @@ describe("CurrentView capture", () => {
         expect(css).toContain("https://app.example/theme/fonts/icons.woff2");
         expect(css).toContain("https://app.example/theme/images/company.svg");
         expect(css).toContain("data:image/svg+xml;base64,AA");
+    });
+
+    it("embeds font-face binaries without embedding unrelated image resources", async () => {
+        const css = "@font-face { font-family: SourceSansPro; src: url('https://app.example/fonts/source.woff2') format('woff2'); } " +
+            ".report { background-image: url('https://app.example/images/background.png'); }";
+        const fetchResource = vi.fn().mockResolvedValue({
+            ok: true,
+            blob: () => Promise.resolve(new Blob([new Uint8Array([119, 79, 70, 70])], { type: "font/woff2" }))
+        });
+        const embedded = await embedFontResources(css, fetchResource as typeof fetch);
+        expect(fetchResource).toHaveBeenCalledOnce();
+        expect(fetchResource).toHaveBeenCalledWith("https://app.example/fonts/source.woff2", { credentials: "same-origin" });
+        expect(embedded).toContain("data:font/woff2;base64,d09GRg==");
+        expect(embedded).toContain("https://app.example/images/background.png");
+    });
+
+    it("keeps the absolute font URL when authenticated font retrieval fails", async () => {
+        const css = "@font-face { font-family: SourceSansPro; src: url(https://app.example/fonts/source.woff2); }";
+        const embedded = await embedFontResources(css, vi.fn().mockRejectedValue(new Error("blocked")) as typeof fetch);
+        expect(embedded).toBe(css);
     });
 
     it("preserves image and SVG resources with resolvable absolute URLs", () => {

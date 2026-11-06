@@ -359,6 +359,7 @@ Current View export sırasında mümkün olduğunca aşağıdaki stil kaynaklar�
 - widget CSS
 - CSS variables
 - typography
+- authenticated `@font-face` web fonts (WOFF/WOFF2/TTF/OTF are embedded into the standalone Current View HTML when accessible)
 - colors
 - backgrounds
 - borders

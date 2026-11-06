@@ -3,6 +3,7 @@ import Big from "big.js";
 import { HtmlPdfExportViewContainerProps } from "../typings/HtmlPdfExportViewProps";
 import { cloneExportRoot } from "./capture/cloneExportRoot";
 import { buildHtmlDocument } from "./capture/buildHtmlDocument";
+import { collectStylesWithEmbeddedFonts } from "./capture/collectStyles";
 import { measureSourceGeometry } from "./capture/measureSourceGeometry";
 import { normalizeWordSemantics } from "./capture/normalizeWordSemantics";
 import { executeFullDataExport } from "./export/exportScope";
@@ -262,7 +263,9 @@ export function HtmlPdfExportView(props: HtmlPdfExportViewContainerProps): React
                 throw new Error("Exact View capture lost visible report content before PDF generation.");
             }
             if (format === "word") normalizeWordSemantics(clone);
-            const html = buildHtmlDocument(clone, { includeStyles: props.includeStyles,
+            const capturedStyles = props.includeStyles
+                ? await collectStylesWithEmbeddedFonts(document, appearance === "exactView") : undefined;
+            const html = buildHtmlDocument(clone, { includeStyles: props.includeStyles, capturedStyles,
                 appearanceMode: appearance, pdfVisualPolish,
                 corporatePrintLayout: corporateResult }, {
                 sourceWidth: geometry.width,
